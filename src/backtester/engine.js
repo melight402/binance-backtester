@@ -1,5 +1,5 @@
 import {
-  DAILY_CONTEXT_BARS,
+  CONTEXT_BARS,
   FIXED_INTERVALS,
   MIN_BARS_AHEAD,
   SPEED_MS,
@@ -117,7 +117,12 @@ export class BacktestEngine {
       dataStatus: this.dataStatus,
       dataError: this.dataError,
       main: visibleMain,
-      hourly: aggregateCandles(visibleMain, FIXED_INTERVALS.hour),
+      hourly: mergeContextCandles(
+        this.series.hourly?.candles,
+        aggregateCandles(visibleMain, FIXED_INTERVALS.hour),
+        FIXED_INTERVALS.hour,
+        this.simTime,
+      ),
       daily: mergeContextCandles(
         this.series.daily?.candles,
         aggregateCandles(visibleMain, FIXED_INTERVALS.day),
@@ -139,7 +144,8 @@ export class BacktestEngine {
     try {
       await Promise.all([
         this.series.main.ensureWarmup(this.simTime, WARMUP_BARS),
-        this.series.daily.ensureWarmup(this.simTime, DAILY_CONTEXT_BARS),
+        this.series.hourly.ensureWarmup(this.simTime, CONTEXT_BARS),
+        this.series.daily.ensureWarmup(this.simTime, CONTEXT_BARS),
       ]);
 
       if (token !== this.loadToken) return;

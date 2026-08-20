@@ -44,9 +44,9 @@ export const HMA_COLORS = { 50: '#4098ff', 200: '#3ecf8e' };
 // so long indicators (HMA 200) already have valid values on bar one.
 export const WARMUP_BARS = 260;
 
-// Extra closed daily bars for the bottom 1d chart. Main-TF warmup is in
-// main-interval bars, so a 1m/5m top chart would otherwise leave daily empty.
-export const DAILY_CONTEXT_BARS = 200;
+// Extra closed bars for the bottom 1h / 1d charts. Main-TF warmup is in
+// main-interval bars, so a 1m/5m top chart would otherwise leave them empty.
+export const CONTEXT_BARS = 200;
 
 // Re-fetch the next page from Binance once fewer than this many
 // un-revealed candles remain ahead of the playhead.
