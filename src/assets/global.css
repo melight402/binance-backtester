@@ -107,6 +107,38 @@ body {
   z-index: 5;
 }
 
+.chart-ohlc-legend {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  z-index: 6;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: #ffffff;
+  pointer-events: none;
+  font: 11px/1.2 'JetBrains Mono', ui-monospace, monospace;
+}
+
+.chart-ohlc-legend[hidden] {
+  display: none;
+}
+
+.chart-ohlc-item {
+  white-space: nowrap;
+}
+
+.chart-ohlc-label {
+  color: #5b6573;
+  margin-right: 4px;
+}
+
+.chart-ohlc-value {
+  font-variant-numeric: tabular-nums;
+}
+
 .position-handle {
   position: absolute;
   display: none;

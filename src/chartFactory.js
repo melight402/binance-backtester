@@ -122,6 +122,9 @@ export function createChart(container, options) {
     const overlay = document.createElement('div');
     overlay.className = 'chart-drawing-overlay';
     container.appendChild(overlay);
+    const ohlcLegend = document.createElement('div');
+    ohlcLegend.className = 'chart-ohlc-legend';
+    container.appendChild(ohlcLegend);
     const resizeObserver = new ResizeObserver(() => {
         const width = container.clientWidth;
         const height = container.clientHeight;
@@ -130,6 +133,50 @@ export function createChart(container, options) {
     });
 
     const formatPrice = (price) => price >= 100 ? price.toFixed(2) : price.toFixed(4);
+
+    function renderOhlcLegend(candle) {
+        if (!candle) {
+            ohlcLegend.replaceChildren();
+            ohlcLegend.hidden = true;
+            return;
+        }
+        const color = candle.close >= candle.open ? '#0f6b5c' : '#ef4460';
+        const fields = [
+            ['O', candle.open],
+            ['H', candle.high],
+            ['L', candle.low],
+            ['C', candle.close],
+        ];
+        ohlcLegend.hidden = false;
+        ohlcLegend.replaceChildren(...fields.map(([label, value]) => {
+            const item = document.createElement('span');
+            item.className = 'chart-ohlc-item';
+            const name = document.createElement('span');
+            name.className = 'chart-ohlc-label';
+            name.textContent = label;
+            const price = document.createElement('span');
+            price.className = 'chart-ohlc-value';
+            price.style.color = color;
+            price.textContent = formatPrice(value);
+            item.append(name, price);
+            return item;
+        }));
+    }
+
+    function candleFromCrosshairParam(param) {
+        const seriesPoint = param.seriesData?.get?.(candlestickSeries);
+        if (seriesPoint && Number.isFinite(seriesPoint.open)) return seriesPoint;
+        if (param.time == null) return null;
+        return candlesData.find((candle) => candle.time === param.time) || null;
+    }
+
+    const handleCrosshairMove = (param) => {
+        if (!param?.point) {
+            renderOhlcLegend(null);
+            return;
+        }
+        renderOhlcLegend(candleFromCrosshairParam(param));
+    };
 
     function placeBox(element, left, width, firstY, secondY) {
         element.style.display = 'block';
@@ -409,6 +456,7 @@ export function createChart(container, options) {
     };
 
     chart.subscribeClick(handleChartClick);
+    chart.subscribeCrosshairMove(handleCrosshairMove);
     const saveVisibleRange = () => {
         const range = chart.timeScale().getVisibleLogicalRange();
         if (!range) return;
@@ -513,7 +561,9 @@ export function createChart(container, options) {
             clearTimeout(saveStateTimer);
             chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
             overlay.remove();
+            ohlcLegend.remove();
             chart.unsubscribeClick(handleChartClick);
+            chart.unsubscribeCrosshairMove(handleCrosshairMove);
             chart.remove();
         }
     };

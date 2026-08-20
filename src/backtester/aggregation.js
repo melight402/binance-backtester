@@ -38,3 +38,27 @@ export function aggregateCandles(candles, interval) {
 
   return Array.from(buckets.values()).sort((a, b) => a.time - b.time);
 }
+
+/**
+ * Native higher-TF klines for buckets already closed vs simTime, plus the
+ * current incomplete bucket from lower-TF aggregation (no lookahead).
+ */
+export function mergeContextCandles(nativeCandles, aggregatedCandles, interval, simTime) {
+  const intervalSeconds = INTERVAL_SECONDS[interval];
+  if (!intervalSeconds) return [];
+
+  const byTime = new Map();
+  for (const candle of nativeCandles || []) {
+    if (!candle || !Number.isFinite(candle.time)) continue;
+    if (candle.time + intervalSeconds <= simTime) byTime.set(candle.time, candle);
+  }
+  for (const candle of aggregatedCandles || []) {
+    if (!candle || !Number.isFinite(candle.time)) continue;
+    if (candle.time + intervalSeconds <= simTime) {
+      if (!byTime.has(candle.time)) byTime.set(candle.time, candle);
+    } else if (candle.time <= simTime) {
+      byTime.set(candle.time, candle);
+    }
+  }
+  return Array.from(byTime.values()).sort((a, b) => a.time - b.time);
+}

@@ -1,11 +1,12 @@
 import {
+  DAILY_CONTEXT_BARS,
   FIXED_INTERVALS,
   MIN_BARS_AHEAD,
   SPEED_MS,
   WARMUP_BARS,
 } from './config.js';
 import { TimeframeSeries } from './dataManager.js';
-import { aggregateCandles } from './aggregation.js';
+import { aggregateCandles, mergeContextCandles } from './aggregation.js';
 import { loadDrawings, saveDrawings } from './drawingStorage.js';
 import { INTERVAL_SECONDS } from './config.js';
 import { DrawingAdapter } from '../chart/drawingAdapter.js';
@@ -117,7 +118,12 @@ export class BacktestEngine {
       dataError: this.dataError,
       main: visibleMain,
       hourly: aggregateCandles(visibleMain, FIXED_INTERVALS.hour),
-      daily: aggregateCandles(visibleMain, FIXED_INTERVALS.day),
+      daily: mergeContextCandles(
+        this.series.daily?.candles,
+        aggregateCandles(visibleMain, FIXED_INTERVALS.day),
+        FIXED_INTERVALS.day,
+        this.simTime,
+      ),
     };
   }
 
@@ -131,7 +137,10 @@ export class BacktestEngine {
     if (!this.series.main || token !== this.loadToken) return;
 
     try {
-      await this.series.main.ensureWarmup(this.simTime, WARMUP_BARS);
+      await Promise.all([
+        this.series.main.ensureWarmup(this.simTime, WARMUP_BARS),
+        this.series.daily.ensureWarmup(this.simTime, DAILY_CONTEXT_BARS),
+      ]);
 
       if (token !== this.loadToken) return;
 
