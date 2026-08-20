@@ -32,8 +32,8 @@ export const FIXED_INTERVALS = { hour: '1h', day: '1d' };
 
 // Trading sessions shown as background shading, in UTC hours [start, end).
 export const SESSIONS = {
-  asia: { label: 'Asia', startHour: 0, endHour: 9, color: 'rgba(64, 152, 255, 0.10)' },
-  newyork: { label: 'New York', startHour: 13, endHour: 22, color: 'rgba(168, 107, 255, 0.11)' },
+  asia: { label: 'Asia', startHour: 0, endHour: 9, color: 'rgba(168, 107, 255, 0.11)' },
+  newyork: { label: 'New York', startHour: 13, endHour: 22, color: 'rgba(64, 152, 255, 0.10)' },
 };
 
 // Hull Moving Average periods drawn on every chart.

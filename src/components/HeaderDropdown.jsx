@@ -14,8 +14,8 @@ export function HeaderDropdown(props) {
     setPanelStyle({
       position: 'fixed',
       top: `${rect.bottom + 6}px`,
-      left: `${rect.left}px`,
-      'min-width': `${Math.max(rect.width, 240)}px`,
+      right: 0,
+      'min-width': `240px`,
       'z-index': '1000',
     });
   };

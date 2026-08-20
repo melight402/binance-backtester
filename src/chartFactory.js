@@ -12,6 +12,43 @@ import { loadChartState, saveChartState } from './backtester/chartStateStorage.j
 export function createChart(container, options) {
     const chart = createLibraryChart(container, {
         autoSize: true,
+        localization: {
+            timeFormatter: (time) => {
+                // Данные времени от библиотеки могут приходить как timestamp в секундах
+                // или как объект { year, month, day }
+                let date;
+                if (typeof time === 'object' && time !== null) {
+                    date = new Date(Date.UTC(time.year, time.month - 1, time.day));
+                } else {
+                    date = new Date(time * 1000);
+                }
+
+                // Массивы для форматирования (можешь заменить на русские, если нужно)
+                const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                // const days = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']; // для русского
+
+                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                // const months = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
+
+                const dayOfWeek = days[date.getUTCDay()]; // День недели
+                const day = String(date.getUTCDate()).padStart(2, '0');
+                const month = months[date.getUTCMonth()];
+                const year = String(date.getUTCFullYear()).slice(-2);
+
+                // Проверяем, нужно ли показывать время (часы и минуты)
+                const showTime = !['1d', '1w', '1M'].includes(options.timeframe);
+
+                if (showTime) {
+                    const hours = String(date.getUTCHours()).padStart(2, '0');
+                    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+                    // Выведет: "Mon, 10 Aug '26 02:00"
+                    return `${dayOfWeek}, ${day} ${month} '${year} ${hours}:${minutes}`;
+                }
+
+                // Выведет: "Mon, 10 Aug '26"
+                return `${dayOfWeek}, ${day} ${month} '${year}`;
+            }
+        },
         layout: {
             background: { type: ColorType.Solid, color: '#0a0d12' },
             textColor: '#9aa7b8',

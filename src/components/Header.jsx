@@ -431,32 +431,6 @@ export function Header() {
             />
           </label>
         </div>
-        <div class="header-dropdown-section">
-          <div class="header-dropdown-section-title">Close trade</div>
-          <label class="header-dropdown-row" for="profit-loss">
-            <span class="header-dropdown-row-label">Result</span>
-            <select
-              id="profit-loss"
-              class="header-dropdown-input header-dropdown-input-wide"
-              value={profitLoss()}
-              onChange={(e) => setProfitLoss(e.currentTarget.value)}
-            >
-              <option value="profit">Profit</option>
-              <option value="loss">Loss</option>
-            </select>
-          </label>
-          <label class="header-dropdown-row" for="trade-note">
-            <span class="header-dropdown-row-label">Note</span>
-            <input
-              id="trade-note"
-              class="header-dropdown-input header-dropdown-input-wide"
-              type="text"
-              placeholder="Описание сделки"
-              value={tradeNote()}
-              onInput={(e) => setTradeNote(e.currentTarget.value)}
-            />
-          </label>
-        </div>
       </HeaderDropdown>
 
       <div class="flex-row align-center" style={{ gap: '6px' }}>
