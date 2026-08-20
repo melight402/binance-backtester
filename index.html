@@ -1,69 +1,16 @@
 <!DOCTYPE html>
 <html lang="ru">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Futures Backtester — Binance USDT-M</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="style.css" />
-<script src="https://unpkg.com/lightweight-charts@5.2.0/dist/lightweight-charts.standalone.production.js"></script>
-</head>
-<body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Binance Futures Backtester & Terminal</title>
+    <!-- Подключаем иконки или глобальные шрифты, если они были в historyFront -->
+  </head>
+  <body>
+    <!-- Корневой контейнер, в который SolidJS смонтирует всё приложение -->
+    <div id="root"></div>
 
-<header class="toolbar">
-  <div id="dtControl" class="dt-control"></div>
-
-  <div class="toolbar-group">
-    <button id="btnLong" class="btn btn-long" title="Открыть длинную позицию">
-      <span class="btn-arrow">&#9650;</span> Long
-    </button>
-    <button id="btnShort" class="btn btn-short" title="Открыть короткую позицию">
-      <span class="btn-arrow">&#9660;</span> Short
-    </button>
-  </div>
-
-  <div class="toolbar-group">
-    <button id="btnHLine" class="btn btn-icon" title="Горизонтальный уровень">&#8212;</button>
-    <button id="btnClear" class="btn btn-icon btn-danger-ghost" title="Удалить все уровни и позиции">&#128465;</button>
-  </div>
-
-  <div class="toolbar-spacer"></div>
-
-  <select id="timeframeSelect" class="select" title="Таймфрейм верхнего графика"></select>
-
-  <div id="symbolName" class="symbol-name">BTCUSDT</div>
-
-  <div class="speed-control" title="Скорость воспроизведения">
-    <span class="speed-icon">&#9889;</span>
-    <input type="range" id="speedSlider" min="1" max="10" value="5" />
-  </div>
-
-  <button id="btnPlay" class="btn btn-icon btn-play" title="Пуск / пауза">&#9654;</button>
-
-  <button id="btnSidebar" class="btn btn-icon" title="Показать / скрыть список пар">&#9776;</button>
-</header>
-
-<div id="statusBar" class="status-bar hidden"></div>
-
-<div id="appBody" class="app-body">
-  <main class="charts-area">
-    <div id="chartTop" class="chart-container chart-top"></div>
-    <div class="charts-bottom">
-      <div id="chart1h" class="chart-container chart-half"></div>
-      <div id="chart1d" class="chart-container chart-half"></div>
-    </div>
-  </main>
-
-  <aside id="sidebar" class="sidebar">
-    <div class="sidebar-search">
-      <input type="text" id="pairSearch" placeholder="Поиск пары..." />
-    </div>
-    <div id="pairList" class="pair-list"></div>
-  </aside>
-</div>
-
-<script type="module" src="js/app.js"></script>
-</body>
+    <!-- Точка входа для Vite. Указываем путь к главному файлу инициализации -->
+    <script type="module" src="/src/index.jsx"></script>
+  </body>
 </html>

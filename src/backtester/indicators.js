@@ -79,3 +79,4 @@ export function buildHmaLineData(candles, period) {
   }
   return out;
 }
+

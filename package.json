@@ -1,0 +1,24 @@
+{
+  "name": "history-backtester",
+  "version": "1.0.0",
+  "description": "Binance Backtester merged with HistoryFront UI on SolidJS",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "serve": "vite preview",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "fancy-canvas": "^0.2.2",
+    "html2canvas": "^1.4.1",
+    "solid-js": "^1.9.4",
+    "trading-charts-with-tools": "file:../trading-charts-with-tools"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.1",
+    "vite": "^6.1.0",
+    "vite-plugin-solid": "^2.11.0",
+    "vitest": "^3.0.5"
+  }
+}

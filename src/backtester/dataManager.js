@@ -16,7 +16,10 @@ export class TimeframeSeries {
     this.interval = interval;
     this.intervalSeconds = INTERVAL_SECONDS[interval];
     this.candles = loadCandles(symbol, interval); // ascending by time
+    this._fetchingWarmup = false;
     this._fetchingAhead = false;
+    this.requestController = new AbortController();
+    this.requestGeneration = 0;
   }
 
   countAtOrBefore(time) {
@@ -44,27 +47,35 @@ export class TimeframeSeries {
 
   /** Make sure at least `warmupBars` candles exist at or before `atTime`. */
   async ensureWarmup(atTime, warmupBars) {
-    if (this.countAtOrBefore(atTime) >= warmupBars) return;
+    if (this.countAtOrBefore(atTime) >= warmupBars || this._fetchingWarmup) return;
 
+    const generation = this.requestGeneration;
+    this._fetchingWarmup = true;
     let guard = 0;
-    while (this.countAtOrBefore(atTime) < warmupBars && guard < 12) {
-      guard++;
-      const earliest = this.candles[0];
-      const endTimeMs = earliest ? earliest.time * 1000 - 1 : atTime * 1000 + 999;
-      const page = await fetchKlines(this.symbol, this.interval, {
-        endTime: endTimeMs,
-        limit: KLINES_PAGE_LIMIT,
-      });
-      if (!page.length) break;
-      this._merge(page);
-      if (page.length < KLINES_PAGE_LIMIT) break; // reached start of symbol's history
+    try {
+      while (this.countAtOrBefore(atTime) < warmupBars && guard < 12) {
+        guard++;
+        const earliest = this.candles[0];
+        const endTimeMs = earliest ? earliest.time * 1000 - 1 : atTime * 1000 + 999;
+        const page = await fetchKlines(this.symbol, this.interval, {
+          endTime: endTimeMs,
+          limit: KLINES_PAGE_LIMIT,
+          signal: this.requestController.signal,
+        });
+        if (!page.length) break;
+        this._merge(page);
+        if (page.length < KLINES_PAGE_LIMIT) break; // reached start of symbol's history
+      }
+    } finally {
+      if (generation === this.requestGeneration) this._fetchingWarmup = false;
+      this._persist();
     }
-    this._persist();
   }
 
   /** Make sure at least `minAhead` candles exist strictly after `simTime`. */
   async ensureAhead(simTime, minAhead) {
     if (this.countAfter(simTime) >= minAhead || this._fetchingAhead) return;
+    const generation = this.requestGeneration;
     this._fetchingAhead = true;
     try {
       let guard = 0;
@@ -77,13 +88,14 @@ export class TimeframeSeries {
         const page = await fetchKlines(this.symbol, this.interval, {
           startTime: startTimeMs,
           limit: KLINES_PAGE_LIMIT,
+          signal: this.requestController.signal,
         });
         if (!page.length) break;
         this._merge(page);
         if (page.length < KLINES_PAGE_LIMIT) break; // caught up to live data
       }
     } finally {
-      this._fetchingAhead = false;
+      if (generation === this.requestGeneration) this._fetchingAhead = false;
       this._persist();
     }
   }
@@ -94,7 +106,25 @@ export class TimeframeSeries {
     this.candles = Array.from(byTime.values()).sort((a, b) => a.time - b.time);
   }
 
+  dispose() {
+    this.requestGeneration += 1;
+    this.requestController.abort();
+  }
+
+  resetRequests() {
+    this.requestGeneration += 1;
+    this.requestController.abort();
+    this.requestController = new AbortController();
+    this._fetchingWarmup = false;
+    this._fetchingAhead = false;
+  }
+
   _persist() {
     this.candles = saveCandles(this.symbol, this.interval, this.candles);
   }
 }
+
+export { BacktestEngine } from './engine.js';
+import { BacktestEngine } from './engine.js';
+
+export const dataManager = new BacktestEngine();

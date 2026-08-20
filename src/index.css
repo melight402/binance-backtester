@@ -1,0 +1,59 @@
+/* src/index.css */
+
+/* Обеспечиваем, чтобы корневой контейнер SolidJS занимал 100% экрана */
+#root {
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: #131722; /* Защита от белых вспышек при загрузке */
+}
+
+/* Утилитные классы для быстрого управления флексбоксами в компонентах */
+.flex-row {
+  display: flex;
+  flex-direction: row;
+}
+
+.flex-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.align-center {
+  align-items: center;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+/* Стили для кастомного скроллбара в сайдбаре списка пар (в стиле TradingView) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1c2030;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #363a45;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4c525e;
+}
+
+/* Класс анимации для плавного появления элементов UI */
+.fade-in {
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

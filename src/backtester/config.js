@@ -4,7 +4,7 @@
 export const BINANCE_FAPI_BASE = 'https://fapi.binance.com';
 
 // Seconds-per-bar for every interval the app understands.
-// (Binance also has 2h/6h/8h/12h/3d/1w but we only expose the ones
+// (Binance also has 2h/6h/8h/12h/3d but we only expose the ones
 // most useful for discretionary backtesting in the timeframe dropdown.)
 export const INTERVAL_SECONDS = {
   '1m': 60,
@@ -21,10 +21,11 @@ export const INTERVAL_SECONDS = {
   '1d': 86400,
   '3d': 259200,
   '1w': 604800,
+  '1M': 2592000,
 };
 
 // Intervals offered in the header timeframe dropdown (drives the top chart).
-export const TOP_TIMEFRAME_OPTIONS = ['1m', '3m', '5m', '15m', '30m', '1h', '4h', '1d'];
+export const TOP_TIMEFRAME_OPTIONS = ['1m', '3m', '5m', '15m', '30m', '1h', '4h', '1d', '1w', '1M'];
 
 // The two fixed context charts at the bottom.
 export const FIXED_INTERVALS = { hour: '1h', day: '1d' };

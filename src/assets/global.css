@@ -1,0 +1,385 @@
+/* ==========================================================================
+   1. ГЛОБАЛЬНЫЕ СБРОСЫ И ТЕМА ОФОРМЛЕНИЯ (Из темы TradingView / historyFront)
+   ========================================================================== */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+    Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+  background-color: #131722; /* Фирменный темный цвет графиков Binance/TradingView */
+  color: #d1d4dc;
+  overflow: hidden; /* Запрещаем скролл всей страницы, терминал должен быть монолитным */
+  height: 100vh;
+  width: 100vw;
+}
+
+/* ==========================================================================
+   2. СЕТКА ТЕРМИНАЛА (Макет приложения)
+   ========================================================================== */
+.terminal-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  padding-top: 10px;
+}
+
+.terminal-header {
+  position: relative;
+  z-index: 20;
+  height: 48px;
+  background-color: #1c2030;
+  border-bottom: 1px solid #2a2e39;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 20px;
+  overflow: visible;
+}
+
+.terminal-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.terminal-body {
+  display: flex;
+  flex: 1;
+  height: calc(100vh - 48px);
+  position: relative;
+  overflow: hidden;
+}
+
+/* ==========================================================================
+   3. РАБОЧАЯ ОБЛАСТЬ С ГРАФИКАМИ (Зона отрисовки Canvas)
+   ========================================================================== */
+.charts-workspace {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 8px;
+  gap: 8px;
+  background-color: #131722;
+}
+
+.main-chart-row {
+  flex: 2; /* Верхний график занимает больше места */
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  position: relative;
+}
+
+.sub-charts-row {
+  flex: 1; /* Нижний ряд с часовым и дневным графиком */
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.chart-container {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  background-color: #1c2030;
+  border: 1px solid #2a2e39;
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+}
+
+.chart-drawing-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.position-handle {
+  position: absolute;
+  display: none;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #1683ff;
+  border-radius: 50%;
+  background: #151923;
+  box-sizing: border-box;
+  cursor: ns-resize;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.position-dragging {
+  cursor: ns-resize;
+  user-select: none;
+}
+
+.level-handle {
+  position: absolute;
+  display: none;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #e8b339;
+  border-radius: 50%;
+  background: #151923;
+  box-sizing: border-box;
+  cursor: ns-resize;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.position-zone {
+  position: absolute;
+  display: none;
+}
+
+.position-zone-risk {
+  background: rgba(239, 68, 96, 0.16);
+}
+
+.position-zone-reward {
+  background: rgba(34, 195, 166, 0.16);
+}
+
+.position-label {
+  position: absolute;
+  display: none;
+  max-width: calc(100% - 12px);
+  overflow: hidden;
+  color: #e6edf5;
+  font: 10px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px #000;
+}
+
+.position-label-selected {
+  outline: 1px solid #ffffff;
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+/* ==========================================================================
+   4. САЙДБАР (Выезжающая панель из binance-backtester)
+   ========================================================================== */
+.terminal-sidebar {
+  flex: 0 0 200px;
+  width: 200px;
+  min-width: 0;
+  height: 100%;
+  background-color: #1c2030;
+  border-left: 1px solid #2a2e39;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-error {
+  padding: 8px 10px;
+  border-bottom: 1px solid #5b2733;
+  background: rgba(239, 68, 96, 0.12);
+  color: #ff8b9b;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.data-error {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border: 1px solid #5b2733;
+  background: rgba(239, 68, 96, 0.12);
+  color: #ff8b9b;
+  font-size: 11px;
+}
+
+.data-loading {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border: 1px solid #39485f;
+  background: rgba(64, 152, 255, 0.1);
+  color: #9fc4ff;
+  font-size: 11px;
+}
+
+/* ==========================================================================
+   5. СТИЛИ ЭЛЕМЕНТОВ ИНТЕРФЕЙСА (Кнопки, Инпуты, Календарь)
+   ========================================================================== */
+button {
+  background-color: #2962ff; /* Брендовый синий цвет TradingView */
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease;
+}
+
+button:hover {
+  background-color: #1e4bd8;
+}
+
+button.active {
+  background-color: #00c853; /* Зеленый для Long/Play */
+}
+
+input, select {
+  background-color: #2a2e39;
+  border: 1px solid #434651;
+  color: #d1d4dc;
+  padding: 6px 10px;
+  border-radius: 4px;
+  outline: none;
+}
+
+.position-status {
+  flex-shrink: 0;
+  max-width: 240px;
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.position-status-success { color: #22c3a6; }
+.position-status-error { color: #ef4460; }
+
+.header-dropdown {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.header-dropdown-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 10px;
+  background-color: #2a2e39;
+  color: #d1d4dc;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.header-dropdown-trigger:hover,
+.header-dropdown-trigger.is-open {
+  background-color: #363a45;
+}
+
+.header-dropdown-label {
+  color: #fff;
+}
+
+.header-dropdown-summary {
+  max-width: 160px;
+  overflow: hidden;
+  color: #8b93a7;
+  font-size: 10px;
+  text-overflow: ellipsis;
+}
+
+.header-dropdown-chevron {
+  color: #8b93a7;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.header-dropdown-panel {
+  min-width: 240px;
+  padding: 10px;
+  border: 1px solid #434651;
+  border-radius: 6px;
+  background-color: #1c2030;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+}
+
+.header-dropdown-section + .header-dropdown-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #2a2e39;
+}
+
+.header-dropdown-section-title {
+  margin-bottom: 8px;
+  color: #8b93a7;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.header-dropdown-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: #d1d4dc;
+  font-size: 11px;
+}
+
+.header-dropdown-row:last-child {
+  margin-bottom: 0;
+}
+
+.header-dropdown-row-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.header-dropdown-row-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.header-dropdown-input {
+  width: 72px;
+  padding: 4px 6px;
+  font-size: 11px;
+}
+
+.header-dropdown-input-wide {
+  width: 120px;
+}
+
+.header-dropdown-row input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+}
+
+.header-dropdown-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #2a2e39;
+}
+
+.header-dropdown-actions button {
+  width: 100%;
+  font-size: 11px;
+}
+
+input:focus, select:focus {
+  border-color: #2962ff;
+}

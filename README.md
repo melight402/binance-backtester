@@ -1,107 +1,46 @@
-# Binance USDT-M Futures Backtester
+# Solid Backtest
 
-Локальное фронтенд-приложение для ручного бэктестинга на исторических данных
-Binance Futures (USDT-M, бессрочные контракты). Без бэкенда — статические
-файлы + прямые запросы к публичному REST API Binance из браузера.
+SolidJS history backtester with three synchronized chart panels.
 
-## Запуск
+## Architecture
 
-Открывать `index.html` напрямую двойным кликом **не получится** — код
-использует ES-модули (`import`/`export`) и `localStorage`, которым нужен
-настоящий `http://`, а не `file://`. Поднимите любой локальный сервер в папке
-проекта, например:
+- `src/backtester/engine.js` owns simulation time, loading, aggregation, and drawings.
+- `src/backtester/dataManager.js` provides candle normalization, cache paging, and request cancellation.
+- `src/backtester/risk.js` and `src/backtester/positionCalculations.js` contain pure position sizing and precision logic.
+- `src/chart/chartAdapter.js` and `src/chart/drawingAdapter.js` isolate chart and drawing contracts from Solid components.
+- `src/services/store.js` is the serializable reactive bridge for Solid components.
+- `src/services/storage.js` is the only local persistence boundary.
+- `src/chartFactory.js` owns the chart library instance and drawing overlays.
+- `src/services/positionApi.js` owns multipart position requests and timeout/error normalization.
 
-```bash
-# вариант 1 — Python (обычно уже установлен)
-python3 -m http.server 8000
+Components call engine commands or update store state. They do not own playback timers, Binance requests, or chart lifecycle.
 
-# вариант 2 — Node
-npx serve .
-```
+The engine API is `initialize`, `changeSymbol`, `changeTimeframe`, `seek`, `setSpeed`, `play`, `pause`, `subscribe`, and `dispose`. Internal market time is Unix seconds; browser date inputs and backend payloads use UTC ISO strings only at the boundary.
 
-Затем откройте `http://localhost:8000` в браузере.
+## Configuration
 
-## Что реализовано
+The frontend uses Binance Futures public endpoints through the existing market API. Set `VITE_API_URL` when the position backend is not available at `http://localhost:3001/api`.
 
-**Хедер** (слева направо): календарь с выбором даты и времени до минуты →
-Long / Short → горизонтальный уровень → удалить все уровни/позиции →
-таймфрейм верхнего графика → название пары → слайдер скорости →
-плей/пауза → показать/скрыть сайдбар.
+The backend must expose `/api/positions/history/open`, `/api/positions/history/close`, and `/api/screenshots/upload`. Position screenshots are PNG multipart uploads and are limited by the backend to 10 MB.
 
-**Сайдбар** (справа): список всех бессрочных USDT-M пар с Binance Futures,
-поиск, звёздочка добавляет пару в избранное (закрепляется наверху списка,
-хранится в `localStorage`). Кнопка в хедере скрывает сайдбар (пропадает со
-страницы) и возвращает обратно (выезжает справа).
+Binance can reject requests because of rate limits, regional restrictions, or unavailable symbols. Those failures remain visible in the UI. The backtester uses Unix seconds internally and converts to UTC `Date` values only for browser inputs and API payloads.
 
-**3 графика**: верхний на всю ширину (таймфрейм из дропдауна), снизу слева —
-часовой, справа — дневной. На всех трёх — HMA 50 и HMA 200. На верхнем и
-часовом дополнительно фон подсвечивает сессии Азия (00:00–09:00 UTC) и
-Нью-Йорк (13:00–22:00 UTC); на дневном сессии не показываются (там это не
-имеет смысла).
+## Persistence
 
-**Воспроизведение**: после выбора даты/времени и нажатия Play время начинает
-идти вперёд шагами, равными выбранному таймфрейму верхнего графика. Часовой и
-дневной графики достраивают свою последнюю свечу по мере того, как
-симулированное время проходит через границы их баров — то есть все три
-графика всегда согласованы по одному и тому же моменту времени. Данные
-подгружаются из `localStorage`, а довыгружаются с Binance API, как только
-впереди курсора остаётся меньше 100 ещё не показанных свечей.
+- `solidBacktest:appSettings` stores symbol, timeframe, playback, sidebar, start time, and risk settings.
+- `solidBacktest:indicatorSettings` stores HMA periods/visibility and sessions visibility.
+- `solidBacktest:drawings:<symbol>` stores synchronized drawing tools.
+- `solidBacktest:chartState:<symbol>:<interval>:<type>` stores visible chart ranges.
+- `lastOpenPosition_<symbol>` stores the local position reference used by close workflow.
 
-**Long / Short**: клик рисует на верхнем графике вход по цене последней
-видимой свечи, стоп и цель (по умолчанию 1% риска, соотношение 1:2), плюс
-закрашенные зоны риска/прибыли — как в примере со скриншота. Это визуальная
-разметка сделки, а не расчёт PnL по счёту.
+Malformed storage entries are ignored and replaced by defaults or empty state.
 
-**Горизонтальный уровень**: кнопка переводит верхний график в режим "ждём
-клик", следующий клик по графику ставит пунктирную линию на этой цене.
+## Troubleshooting
 
-Кнопка "удалить" в хедере разом убирает все уровни и все Long/Short-разметки
-с верхнего графика.
+If the position backend is stopped, opening and closing report `Position backend is unavailable` and clear their loading state. If a request becomes obsolete because the symbol changes or the component unmounts, it is cancelled and its result is ignored.
 
-## Технические детали и допущения
+The project currently has no lint script. Dependency installation, build, tests, and browser acceptance checks are intentionally tracked separately in `MIGRATION_STATUS.md`.
 
-- API: `https://fapi.binance.com` (USDT-M Futures). Список пар — все символы
-  из `/fapi/v1/exchangeInfo` со статусом `TRADING`, `contractType=PERPETUAL`,
-  `quoteAsset=USDT`. Свечи — `/fapi/v1/klines`.
-- Кэш свечей — в `localStorage`, отдельно по каждой паре и таймфрейму, в
-  компактном виде. Хранится до ~12000 баров на пару/таймфрейм — этого хватает
-  на много месяцев истории на 1D/1H и на несколько недель на 5m.
-- HMA считается по всей загруженной истории, включая ~260 баров "разогрева"
-  перед точкой старта — поэтому индикатор валиден с самой первой видимой
-  свечи, а не появляется через 200 баров после начала.
-- По умолчанию точка старта — "30 дней назад" от текущего момента (это точка
-  отсчёта для проигрывания вперёд; сам календарь позволяет выбрать любую
-  дату/время в прошлом). Время везде — UTC.
-- Если Long/Short/риск-параметры (1% / 1:2) нужно сделать настраиваемыми —
-  это в `js/positions.js`, константы `DEFAULT_RISK_PCT` / `DEFAULT_RR`.
+## Verification phase
 
-## Важная оговорка про Binance API
-
-Публичные эндпоинты Binance Futures обычно отдают `Access-Control-Allow-Origin: *`
-и нормально работают из браузера напрямую, без прокси. Но:
-
-- Binance ограничивает доступ из некоторых регионов (в частности, обычных
-  запросов с IP США) — если у вас именно такой случай, запросы будут падать
-  403/451 независимо от того, что делает этот код.
-- Если это произойдёт, в интерфейсе появится статус-баннер об ошибке загрузки
-  — в таком случае решение вне кода приложения (VPN / другой регион / свой
-  сервер-прокси, который проксирует `fapi.binance.com`).
-
-## Структура проекта
-
-```
-index.html
-style.css
-js/
-  config.js         — константы (таймфреймы, сессии, цвета, лимиты кэша)
-  storage.js         — обёртка над localStorage (свечи + избранное)
-  binanceApi.js       — запросы к fapi.binance.com
-  dataManager.js      — кэш + докачка истории по символу/таймфрейму
-  indicators.js       — WMA / HMA
-  sessions.js         — данные для подсветки сессий Азия/Нью-Йорк
-  chartFactory.js      — создание одного графика (свечи + HMA + сессии + OHLC-бокс)
-  positions.js         — уровни и Long/Short разметка
-  sidebar.js           — список пар, избранное, поиск
-  datetimePicker.js     — попап выбора даты/времени
-  app.js                — точка входа, склеивает всё вместе
-```
+After the code migration is accepted, run dependency installation, build, unit tests, and browser acceptance in that order. Do not treat a successful build as proof of chart lifecycle correctness: verify symbol changes, reload persistence, playback cancellation, three-panel synchronization, drawing tools, screenshot capture, and backend-unavailable recovery.
