@@ -32,6 +32,21 @@ export function Header() {
     setPositionStatus(null);
   });
 
+  createEffect(() => {
+    const status = positionStatus();
+
+    // Если поп-ап показан — запускаем таймер на скрытие
+    if (status !== null) {
+      const timer = setTimeout(() => {
+        setPositionStatus(null);
+      }, 2000);
+
+      // Обязательно сбрасываем прошлый таймер, если статус изменился
+      // или пользователь нажал кнопку еще раз до истечения 5 секунд
+      onCleanup(() => clearTimeout(timer));
+    }
+  });
+
   onCleanup(cancelWorkflow);
 
   onMount(() => {

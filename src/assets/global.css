@@ -249,11 +249,14 @@ input, select {
 
 .position-status {
   flex-shrink: 0;
-  max-width: 240px;
+  max-width: 400px;
   overflow: hidden;
-  font-size: 10px;
+  font-size: 15px;
+  padding: 7px;
   text-overflow: ellipsis;
   white-space: nowrap;
+  background: white;
+  position: absolute;
 }
 
 .position-status-success { color: #22c3a6; }
