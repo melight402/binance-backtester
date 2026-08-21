@@ -15,6 +15,7 @@ import {
   showSidebar,
   setShowSidebar,
   showSubCharts,
+  setShowSubCharts,
   selectedStartTime,
   setSelectedStartTime,
   positionSettings,
@@ -65,6 +66,7 @@ export function App() {
       timeframe: timeframe(),
       speed: simulationSpeed(),
       sidebarOpen: showSidebar(),
+      subChartsOpen: showSubCharts(),
       startTime: selectedStartTime(),
       ...positionSettings(),
     });
@@ -82,6 +84,7 @@ export function App() {
     setTimeframe(savedAppSettings.timeframe);
     setSimulationSpeed(savedAppSettings.speed);
     setShowSidebar(savedAppSettings.sidebarOpen);
+    setShowSubCharts(savedAppSettings.subChartsOpen);
     setSelectedStartTime(savedAppSettings.startTime);
     setPositionSettings({ rr: savedAppSettings.rr, riskUsdt: savedAppSettings.riskUsdt });
     setTvxValue(loadTvxValue());
@@ -193,7 +196,7 @@ export function App() {
           </div>
 
           {/* Нижний ряд с двумя вспомогательными графиками */}
-          <Show when={showSubCharts()}>
+          <Show when={appSettingsHydrated() && showSubCharts()}>
             <div class="sub-charts-row">
               <ChartWrapper 
                 type="1h" 
