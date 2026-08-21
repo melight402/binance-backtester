@@ -45,6 +45,7 @@ export class BacktestEngine {
     this.bindDrawingSubscription();
     this.dataStatus = 'idle';
     this.dataError = null;
+    this.contextChartsEnabled = true;
   }
 
   init({ symbol = this.symbol, interval = this.interval, startTime = null } = {}) {
@@ -144,8 +145,7 @@ export class BacktestEngine {
     try {
       await Promise.all([
         this.series.main.ensureWarmup(this.simTime, WARMUP_BARS),
-        this.series.hourly.ensureWarmup(this.simTime, CONTEXT_BARS),
-        this.series.daily.ensureWarmup(this.simTime, CONTEXT_BARS),
+        ...this.contextWarmupTasks(),
       ]);
 
       if (token !== this.loadToken) return;
@@ -166,6 +166,34 @@ export class BacktestEngine {
       this.pauseSimulation();
       this.emit();
     }
+  }
+
+  contextWarmupTasks() {
+    if (!this.contextChartsEnabled) return [];
+    return [
+      this.series.hourly?.ensureWarmup(this.simTime, CONTEXT_BARS),
+      this.series.daily?.ensureWarmup(this.simTime, CONTEXT_BARS),
+    ].filter(Boolean);
+  }
+
+  setContextChartsEnabled(enabled) {
+    const next = enabled === true;
+    if (this.contextChartsEnabled === next) return;
+    this.contextChartsEnabled = next;
+    if (!next) {
+      this.series.hourly?.resetRequests?.();
+      this.series.daily?.resetRequests?.();
+      return;
+    }
+    if (!this.initialized) return;
+    const token = this.loadToken;
+    Promise.all(this.contextWarmupTasks())
+      .then(() => {
+        if (token === this.loadToken) this.emit();
+      })
+      .catch((error) => {
+        if (error.name === 'AbortError' || token !== this.loadToken) return;
+      });
   }
 
   onDataUpdate(listener) {

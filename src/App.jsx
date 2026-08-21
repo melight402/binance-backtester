@@ -70,6 +70,7 @@ export function App() {
       startTime: selectedStartTime(),
       ...positionSettings(),
     });
+    dataManager.setContextChartsEnabled(showSubCharts());
   });
 
   createEffect(() => {
@@ -85,6 +86,7 @@ export function App() {
     setSimulationSpeed(savedAppSettings.speed);
     setShowSidebar(savedAppSettings.sidebarOpen);
     setShowSubCharts(savedAppSettings.subChartsOpen);
+    dataManager.setContextChartsEnabled(savedAppSettings.subChartsOpen);
     setSelectedStartTime(savedAppSettings.startTime);
     setPositionSettings({ rr: savedAppSettings.rr, riskUsdt: savedAppSettings.riskUsdt });
     setTvxValue(loadTvxValue());
