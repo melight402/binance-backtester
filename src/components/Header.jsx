@@ -1,6 +1,6 @@
 // src/components/Header.jsx
 import { createEffect, createSignal, onCleanup, onMount } from 'solid-js';
-import { isPlaying, setIsPlaying, timeframe, setTimeframe, currentPair, showSidebar, setShowSidebar, showSubCharts, setShowSubCharts, simulationSpeed, setSimulationSpeed, activeTool, setActiveTool, maSettings, setMaSettings, selectedStartTime, setSelectedStartTime, positionSettings, setPositionSettings, drawings, selectedDrawingId, setSelectedDrawingId, tvxValue, setTvxValue } from '../services/store.js';
+import { isPlaying, setIsPlaying, timeframe, setTimeframe, currentPair, showSidebar, setShowSidebar, showSubCharts, setShowSubCharts, simulationSpeed, setSimulationSpeed, activeTool, setActiveTool, maSettings, setMaSettings, selectedStartTime, setSelectedStartTime, positionSettings, setPositionSettings, profitLoss, setProfitLoss, drawings, selectedDrawingId, setSelectedDrawingId, tvxValue, setTvxValue } from '../services/store.js';
 import { TVX_OPTIONS } from '../constants/tvxOptions.js';
 import { TOP_TIMEFRAME_OPTIONS } from '../backtester/config.js';
 import { dataManager } from '../backtester/dataManager.js';
@@ -17,7 +17,6 @@ export function Header() {
   const [clearPositions, setClearPositions] = createSignal(true);
   const [isOpeningPosition, setIsOpeningPosition] = createSignal(false);
   const [isClosingPosition, setIsClosingPosition] = createSignal(false);
-  const [profitLoss, setProfitLoss] = createSignal('profit');
   const [tradeNote, setTradeNote] = createSignal('');
   let workflowController = null;
 

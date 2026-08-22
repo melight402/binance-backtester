@@ -1,7 +1,7 @@
 // src/components/ChartWrapper.jsx
 import { onMount, onCleanup, createEffect } from 'solid-js';
 import { createChartAdapter } from '../chart/chartAdapter.js';
-import { activeTool, clearDrawingsVersion, selectedDrawingId, setActiveTool } from '../services/store.js';
+import { activeTool, selectedDrawingId, setActiveTool } from '../services/store.js';
 
 export function ChartWrapper(props) {
   let chartContainerRef; // Переменная для хранения прямой ссылки на DOM-узел
@@ -61,11 +61,6 @@ export function ChartWrapper(props) {
   createEffect(() => {
     const mode = activeTool();
     if (chartInstance && props.type === 'main') chartInstance.setDrawingMode(mode);
-  });
-
-  createEffect(() => {
-    clearDrawingsVersion();
-    if (chartInstance && props.type === 'main') chartInstance.clearDrawings();
   });
 
   createEffect(() => {

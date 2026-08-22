@@ -38,7 +38,6 @@ export class BacktestEngine {
     this.loadToken = 0;
     this.initialized = false;
     this.mode = null;
-    this.clearDrawingsVersion = 0;
     this.drawings = [];
     this.drawingAdapter = new DrawingAdapter();
     this.unsubscribeDrawings = null;
@@ -113,7 +112,6 @@ export class BacktestEngine {
       isPlaying: this.isPlaying,
       speed: this.speed,
       mode: this.mode,
-      clearDrawingsVersion: this.clearDrawingsVersion,
       drawings: this.drawings,
       dataStatus: this.dataStatus,
       dataError: this.dataError,
@@ -301,7 +299,6 @@ export class BacktestEngine {
 
   clearAllPositionsAndLevels() {
     this.mode = null;
-    this.clearDrawingsVersion += 1;
     this.drawingAdapter.removeAll();
     return true;
   }
@@ -309,8 +306,9 @@ export class BacktestEngine {
   clearDrawingsByType(type) {
     if (!['position', 'level'].includes(type)) return false;
     this.mode = null;
-    this.clearDrawingsVersion += 1;
-    return this.drawingAdapter.removeByType(type);
+    const removed = this.drawingAdapter.removeByType(type);
+    if (!removed) this.emit();
+    return removed;
   }
 
   addDrawing(drawing) {

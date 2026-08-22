@@ -20,6 +20,8 @@ import {
   setSelectedStartTime,
   positionSettings,
   setPositionSettings,
+  profitLoss,
+  setProfitLoss,
   mainCandles,
   setMainCandles,
   hourlyCandles,
@@ -32,7 +34,6 @@ import {
   setDataError,
   simulationSpeed,
   setSimulationSpeed,
-  setClearDrawingsVersion,
   setActiveTool,
   setDrawings,
   drawings,
@@ -69,6 +70,7 @@ export function App() {
       subChartsOpen: showSubCharts(),
       startTime: selectedStartTime(),
       ...positionSettings(),
+      profitLoss: profitLoss(),
     });
     dataManager.setContextChartsEnabled(showSubCharts());
   });
@@ -89,6 +91,7 @@ export function App() {
     dataManager.setContextChartsEnabled(savedAppSettings.subChartsOpen);
     setSelectedStartTime(savedAppSettings.startTime);
     setPositionSettings({ rr: savedAppSettings.rr, riskUsdt: savedAppSettings.riskUsdt });
+    setProfitLoss(savedAppSettings.profitLoss);
     setTvxValue(loadTvxValue());
     setAppSettingsHydrated(true);
     setMaSettings(loadIndicatorSettings());
@@ -99,7 +102,6 @@ export function App() {
       setIsPlaying(state.isPlaying);
       setSimulationSpeed(state.speed);
       setSelectedStartTime(state.simTime);
-      setClearDrawingsVersion(state.clearDrawingsVersion);
       setActiveTool(state.mode);
       setDrawings(state.drawings);
       setMainCandles(state.main);

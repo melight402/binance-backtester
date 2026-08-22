@@ -10,6 +10,7 @@ export const [showSidebar, setShowSidebar] = createSignal(true);
 export const [showSubCharts, setShowSubCharts] = createSignal(true);
 export const [selectedStartTime, setSelectedStartTime] = createSignal(null);
 export const [positionSettings, setPositionSettings] = createSignal({ rr: 2, riskUsdt: 10 });
+export const [profitLoss, setProfitLoss] = createSignal('profit');
 
 // 2. ГЛОБАЛЬНЫЕ СИГНАЛЫ (ДАННЫЕ СВЕЧЕЙ)
 export const [mainCandles, setMainCandles] = createSignal([]);
@@ -21,7 +22,6 @@ export const [dataError, setDataError] = createSignal(null);
 // 3. ДОПОЛНИТЕЛЬНЫЕ СОСТОЯНИЯ (НАПРИМЕР, ДЛЯ РЕЖИМОВ РИСОВАНИЯ ИЗ БЭКТЕСТЕРА)
 export const [activeTool, setActiveTool] = createSignal(null); // 'long', 'short', 'level' или null
 export const [simulationSpeed, setSimulationSpeed] = createSignal(1); // скорость воспроизведения
-export const [clearDrawingsVersion, setClearDrawingsVersion] = createSignal(0);
 export const [drawings, setDrawings] = createSignal([]);
 export const [selectedDrawingId, setSelectedDrawingId] = createSignal(null);
 export const [tvxValue, setTvxValue] = createSignal('level_breakout');

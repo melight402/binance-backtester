@@ -2,6 +2,7 @@ import { readJson, writeJson } from '../services/storage.js';
 
 const APP_SETTINGS_KEY = 'solidBacktest:appSettings';
 const VALID_INTERVALS = new Set(['1m', '3m', '5m', '15m', '30m', '1h', '4h', '1d', '1w', '1M']);
+const VALID_PROFIT_LOSS = new Set(['profit', 'loss']);
 
 const DEFAULT_SETTINGS = {
   symbol: 'BTCUSDT',
@@ -12,6 +13,7 @@ const DEFAULT_SETTINGS = {
   startTime: null,
   rr: 2,
   riskUsdt: 10,
+  profitLoss: 'profit',
 };
 
 export function normalizeAppSettings(value) {
@@ -27,6 +29,7 @@ export function normalizeAppSettings(value) {
     startTime: Number.isFinite(startTime) && startTime > 0 ? Math.min(startTime, currentTimeSeconds) : null,
     rr: Number.isFinite(Number(value?.rr)) ? Math.max(0.1, Math.min(20, Number(value.rr))) : DEFAULT_SETTINGS.rr,
     riskUsdt: Number.isFinite(Number(value?.riskUsdt)) ? Math.max(0.01, Math.min(1000000, Number(value.riskUsdt))) : DEFAULT_SETTINGS.riskUsdt,
+    profitLoss: VALID_PROFIT_LOSS.has(value?.profitLoss) ? value.profitLoss : DEFAULT_SETTINGS.profitLoss,
   };
 }
 
