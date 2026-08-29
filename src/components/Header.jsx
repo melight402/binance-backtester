@@ -304,37 +304,63 @@ export function Header() {
         <button 
           onClick={() => toggleTool('long')} 
           class={activeTool() === 'long' ? 'active' : ''}
+          aria-label="Long"
+          title="Long"
           style={{ "background-color": activeTool() === 'long' ? '#00c853' : '#2a2e39' }}
         >
-          🟢 Long
+          🟢
         </button>
         <button 
           onClick={() => toggleTool('short')} 
           class={activeTool() === 'short' ? 'active' : ''}
+          aria-label="Short"
+          title="Short"
           style={{ "background-color": activeTool() === 'short' ? '#ff3d00' : '#2a2e39' }}
         >
-          🔴 Short
+          🔴
         </button>
         <button 
           onClick={() => toggleTool('level')} 
           class={activeTool() === 'level' ? 'active' : ''}
+          aria-label="Уровень"
+          title="Уровень"
           style={{ "background-color": activeTool() === 'level' ? '#2962ff' : '#2a2e39' }}
         >
-          📍 Уровень
+          📍
+        </button>
+        <button 
+          onClick={() => toggleTool('horizontalRay')} 
+          class={activeTool() === 'horizontalRay' ? 'active' : ''}
+          aria-label="Горизонтальный луч"
+          title="Горизонтальный луч"
+          style={{ "background-color": activeTool() === 'horizontalRay' ? '#2962ff' : '#2a2e39' }}
+        >
+          ➡️
+        </button>
+        <button 
+          onClick={() => toggleTool('trendLine')} 
+          class={activeTool() === 'trendLine' ? 'active' : ''}
+          aria-label="Трендовая линия"
+          title="Трендовая линия"
+          style={{ "background-color": activeTool() === 'trendLine' ? '#2962ff' : '#2a2e39' }}
+        >
+          📐
         </button>
         <button 
           onClick={handleDeleteSelected}
+          aria-label="Удалить выбранный инструмент"
           style={{ "background-color": "#5d4037", "font-size": "12px" }}
           title="Удалить выбранный инструмент (Delete)"
         >
-          ⌫ Удалить
+          ⌫
         </button>
         <button 
           onClick={handleClearSelectedType}
+          aria-label="Очистить рисунки"
           style={{ "background-color": "#b71c1c", "font-size": "12px" }}
           title={clearPositions() ? 'Удалить все позиции текущей котировки' : 'Удалить все горизонтальные уровни текущей котировки'}
         >
-          🗑️ Очистить
+          🗑️
         </button>
         <input
           type="checkbox"

@@ -115,8 +115,13 @@ export function createChart(container, options) {
     let saveStateTimer = null;
     let lastSavedRangeKey = '';
     let activeTool = null;
+    let pendingTrendPoint = null;
+    let pendingTrendPointElement = null;
+    let pendingTrendPreviewElement = null;
     let selectedDrawingId = null;
     const levels = [];
+    const horizontalRays = [];
+    const trendLines = [];
     const positions = [];
     let renderedDrawingsKey = '';
     const overlay = document.createElement('div');
@@ -133,6 +138,79 @@ export function createChart(container, options) {
     });
 
     const formatPrice = (price) => price >= 100 ? price.toFixed(2) : price.toFixed(4);
+
+    const timeToDrawingCoordinate = (time) => {
+        const timeScale = chart.timeScale();
+        const exactCoordinate = timeScale.timeToCoordinate(time);
+        if (exactCoordinate != null) return exactCoordinate;
+        if (!Number.isFinite(time) || candlesData.length === 0) return null;
+
+        const firstCandle = candlesData[0];
+        const lastCandle = candlesData[candlesData.length - 1];
+        const intervalSeconds = candlesData.slice(1).map((candle, index) => candle.time - candlesData[index].time)
+            .find((interval) => interval > 0) || 86400;
+        if (time <= firstCandle.time) return 0;
+        if (time >= lastCandle.time + intervalSeconds) return container.clientWidth;
+        if (time >= lastCandle.time) return timeScale.timeToCoordinate(lastCandle.time);
+
+        let previousCandle = firstCandle;
+        for (const candle of candlesData) {
+            if (candle.time > time) break;
+            previousCandle = candle;
+        }
+        return timeScale.timeToCoordinate(previousCandle.time);
+    };
+
+    const setTrendLineGeometry = (element, startX, startY, endX, endY) => {
+        const width = Math.hypot(endX - startX, endY - startY);
+        const angle = Math.atan2(endY - startY, endX - startX);
+        element.style.left = `${startX}px`;
+        element.style.top = `${startY}px`;
+        element.style.width = `${width}px`;
+        element.style.transform = `rotate(${angle}rad)`;
+        element.style.transformOrigin = '0 0';
+        element.style.display = 'block';
+    };
+
+    const normalizeChartTime = (time) => {
+        if (Number.isFinite(time)) return time;
+        if (time && typeof time === 'object' && Number.isFinite(time.year)) {
+            return Date.UTC(time.year, time.month - 1, time.day) / 1000;
+        }
+        return null;
+    };
+
+    const clearPendingTrendPreview = () => {
+        pendingTrendPointElement?.remove();
+        pendingTrendPreviewElement?.remove();
+        pendingTrendPointElement = null;
+        pendingTrendPreviewElement = null;
+    };
+
+    const updatePendingTrendPreview = (param) => {
+        if (!pendingTrendPoint || !param?.point) return;
+        const currentPrice = candlestickSeries.coordinateToPrice(param.point.y);
+        const currentTime = param.time ?? candlesData[candlesData.length - 1]?.time;
+        const startX = timeToDrawingCoordinate(pendingTrendPoint.time);
+        const startY = candlestickSeries.priceToCoordinate(pendingTrendPoint.price);
+        const endX = timeToDrawingCoordinate(currentTime);
+        const endY = candlestickSeries.priceToCoordinate(currentPrice);
+        if ([startX, startY, endX, endY].some((value) => value == null)) return;
+        if (!pendingTrendPointElement) {
+            pendingTrendPointElement = document.createElement('div');
+            pendingTrendPointElement.className = 'trend-line-point';
+            overlay.appendChild(pendingTrendPointElement);
+        }
+        pendingTrendPointElement.style.left = `${startX}px`;
+        pendingTrendPointElement.style.top = `${startY}px`;
+        pendingTrendPointElement.style.display = 'block';
+        if (!pendingTrendPreviewElement) {
+            pendingTrendPreviewElement = document.createElement('div');
+            pendingTrendPreviewElement.className = 'trend-line trend-line-preview';
+            overlay.appendChild(pendingTrendPreviewElement);
+        }
+        setTrendLineGeometry(pendingTrendPreviewElement, startX, startY, endX, endY);
+    };
 
     function renderOhlcLegend(candle) {
         if (!candle) {
@@ -173,9 +251,11 @@ export function createChart(container, options) {
     const handleCrosshairMove = (param) => {
         if (!param?.point) {
             renderOhlcLegend(null);
+            updatePendingTrendPreview(null);
             return;
         }
         renderOhlcLegend(candleFromCrosshairParam(param));
+        updatePendingTrendPreview(param);
     };
 
     function placeBox(element, left, width, firstY, secondY) {
@@ -196,6 +276,41 @@ export function createChart(container, options) {
             level.handle.style.left = '3px';
             level.handle.style.top = `${y - 7}px`;
             level.handle.style.display = 'block';
+        });
+        horizontalRays.forEach((ray) => {
+            const y = candlestickSeries.priceToCoordinate(ray.price);
+            if (y == null) {
+                ray.element.style.display = 'none';
+                return;
+            }
+            const startX = timeToDrawingCoordinate(ray.startTime);
+            if (startX == null || startX >= container.clientWidth) {
+                ray.element.style.display = 'none';
+                return;
+            }
+            const left = Math.max(0, startX);
+            ray.element.style.left = `${left}px`;
+            ray.element.style.top = `${y - 1}px`;
+            ray.element.style.width = `${Math.max(0, container.clientWidth - left)}px`;
+            ray.element.style.display = 'block';
+        });
+        trendLines.forEach((trendLine) => {
+            const startX = timeToDrawingCoordinate(trendLine.startTime);
+            const endX = timeToDrawingCoordinate(trendLine.endTime);
+            const startY = candlestickSeries.priceToCoordinate(trendLine.startPrice);
+            const endY = candlestickSeries.priceToCoordinate(trendLine.endPrice);
+            if ([startX, endX, startY, endY].some((value) => value == null)) {
+                trendLine.element.style.display = 'none';
+                return;
+            }
+            setTrendLineGeometry(trendLine.element, startX, startY, endX, endY);
+            trendLine.handles.forEach((handle, index) => {
+                const handleX = index === 0 ? startX : endX;
+                const handleY = index === 0 ? startY : endY;
+                handle.style.left = `${handleX}px`;
+                handle.style.top = `${handleY}px`;
+                handle.style.display = trendLine.id === selectedDrawingId ? 'block' : 'none';
+            });
         });
         if (positions.length === 0) return;
         const pane = { width: container.clientWidth, height: container.clientHeight };
@@ -229,6 +344,13 @@ export function createChart(container, options) {
         levels.forEach((level) => candlestickSeries.removePriceLine(level.line));
         levels.forEach((level) => level.handle.remove());
         levels.length = 0;
+        horizontalRays.forEach((ray) => ray.element.remove());
+        horizontalRays.length = 0;
+        trendLines.forEach((trendLine) => {
+            trendLine.element.remove();
+            trendLine.handles.forEach((handle) => handle.remove());
+        });
+        trendLines.length = 0;
         positions.forEach((position) => {
             position.lines.forEach((line) => candlestickSeries.removePriceLine(line));
             position.elements.forEach((element) => element.remove());
@@ -243,6 +365,13 @@ export function createChart(container, options) {
                 lineWidth: level.id === selectedDrawingId ? 3 : 2,
             });
         });
+        horizontalRays.forEach((ray) => {
+            ray.element.classList.toggle('horizontal-ray-selected', ray.id === selectedDrawingId);
+        });
+        trendLines.forEach((trendLine) => {
+            trendLine.element.classList.toggle('trend-line-selected', trendLine.id === selectedDrawingId);
+        });
+        repositionPositions();
         positions.forEach((position) => {
             position.label.classList.toggle('position-label-selected', position.id === selectedDrawingId);
         });
@@ -291,6 +420,71 @@ export function createChart(container, options) {
         });
         overlay.appendChild(handle);
         levels.push({ id: drawingId, price, line, handle });
+        applySelectionStyles();
+        repositionPositions();
+    };
+
+    const addHorizontalRay = (price, startTime, drawingId = null) => {
+        const element = document.createElement('div');
+        element.className = 'horizontal-ray';
+        element.addEventListener('pointerdown', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (drawingId) selectDrawing(drawingId);
+        });
+        overlay.appendChild(element);
+        horizontalRays.push({ id: drawingId, price, startTime, element });
+        applySelectionStyles();
+        repositionPositions();
+    };
+
+    const addTrendLine = (drawing, drawingId = null) => {
+        const element = document.createElement('div');
+        element.className = 'trend-line';
+        element.addEventListener('pointerdown', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (drawingId) selectDrawing(drawingId);
+        });
+        overlay.appendChild(element);
+        const trendLine = { ...drawing, id: drawingId, element, handles: [] };
+        ['start', 'end'].forEach((pointName) => {
+            const handle = document.createElement('div');
+            handle.className = `trend-line-handle trend-line-handle-${pointName}`;
+            handle.addEventListener('pointerdown', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (drawingId) selectDrawing(drawingId);
+                activeTool = null;
+                options.onToolUsed?.();
+                const move = (moveEvent) => {
+                    const rect = container.getBoundingClientRect();
+                    const x = moveEvent.clientX - rect.left;
+                    const y = moveEvent.clientY - rect.top;
+                    const price = candlestickSeries.coordinateToPrice(y);
+                    const time = normalizeChartTime(chart.timeScale().coordinateToTime(x));
+                    if (!Number.isFinite(price) || !Number.isFinite(time)) return;
+                    trendLine[`${pointName}Price`] = price;
+                    trendLine[`${pointName}Time`] = time;
+                    repositionPositions();
+                };
+                const stop = () => {
+                    window.removeEventListener('pointermove', move);
+                    window.removeEventListener('pointerup', stop);
+                    if (drawingId) options.onDrawingModified?.(drawingId, {
+                        startPrice: trendLine.startPrice,
+                        startTime: trendLine.startTime,
+                        endPrice: trendLine.endPrice,
+                        endTime: trendLine.endTime,
+                    });
+                };
+                window.addEventListener('pointermove', move);
+                window.addEventListener('pointerup', stop, { once: true });
+            });
+            overlay.appendChild(handle);
+            trendLine.handles.push(handle);
+        });
+        trendLines.push(trendLine);
         applySelectionStyles();
         repositionPositions();
     };
@@ -391,6 +585,12 @@ export function createChart(container, options) {
         if (drawing.type === 'level') {
             addLevel(drawing.price, drawing.id);
         }
+        if (drawing.type === 'horizontalRay') {
+            addHorizontalRay(drawing.price, drawing.startTime, drawing.id);
+        }
+        if (drawing.type === 'trendLine') {
+            addTrendLine(drawing, drawing.id);
+        }
         if (drawing.type === 'position') {
             addPosition(drawing.side, drawing.entryPrice, drawing.entryTime, drawing.stopPrice, drawing.targetPrice, drawing.id);
         }
@@ -425,6 +625,28 @@ export function createChart(container, options) {
         }
 
         const entryCandle = candlesData[candlesData.length - 1];
+        if (activeTool === 'trendLine') {
+            const point = { price, time: param.time ?? entryCandle.time };
+            if (!pendingTrendPoint) {
+                pendingTrendPoint = point;
+                updatePendingTrendPreview(param);
+                return;
+            }
+            clearPendingTrendPreview();
+            options.onDrawingCreated?.({
+                type: 'trendLine',
+                startPrice: pendingTrendPoint.price,
+                startTime: pendingTrendPoint.time,
+                endPrice: point.price,
+                endTime: point.time,
+                sourceChartId: options.type,
+            });
+            pendingTrendPoint = null;
+            activeTool = null;
+            container.style.cursor = '';
+            options.onToolUsed?.();
+            return;
+        }
         if (activeTool === 'long' || activeTool === 'short') {
             const risk = price * 0.01;
             const drawing = { type: 'position', side: activeTool, entryPrice: price, entryTime: entryCandle.time,
@@ -435,6 +657,10 @@ export function createChart(container, options) {
         }
         if (activeTool === 'level') {
             options.onDrawingCreated?.({ type: 'level', price, sourceChartId: options.type });
+        }
+        if (activeTool === 'horizontalRay') {
+            options.onDrawingCreated?.({ type: 'horizontalRay', price, startTime: param.time ?? entryCandle.time, sourceChartId: options.type });
+            return;
         }
         activeTool = null;
         container.style.cursor = '';
@@ -526,6 +752,10 @@ export function createChart(container, options) {
         },
         setMode(mode) {
             activeTool = mode;
+            if (mode !== 'trendLine') {
+                pendingTrendPoint = null;
+                clearPendingTrendPreview();
+            }
             container.style.cursor = mode ? 'crosshair' : '';
         },
         clearDrawings() {
@@ -556,6 +786,7 @@ export function createChart(container, options) {
             positions.forEach(updatePositionLabel);
         },
         destroy() {
+            clearPendingTrendPreview();
             removeAllDrawings();
             resizeObserver.disconnect();
             clearTimeout(saveStateTimer);

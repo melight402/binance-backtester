@@ -4,6 +4,21 @@ function normalizeDrawing(value) {
     const price = Number(value.price);
     return Number.isFinite(price) && price > 0 ? { ...value, price, sourceChartId: value.sourceChartId || null } : null;
   }
+  if (value.type === 'horizontalRay') {
+    const price = Number(value.price);
+    const startTime = Number(value.startTime);
+    return Number.isFinite(price) && price > 0 && Number.isFinite(startTime)
+      ? { ...value, price, startTime, sourceChartId: value.sourceChartId || null }
+      : null;
+  }
+  if (value.type === 'trendLine') {
+    const prices = [Number(value.startPrice), Number(value.endPrice)];
+    const times = [Number(value.startTime), Number(value.endTime)];
+    return prices.every((price) => Number.isFinite(price) && price > 0)
+      && times.every((time) => Number.isFinite(time))
+      ? { ...value, startPrice: prices[0], endPrice: prices[1], startTime: times[0], endTime: times[1], sourceChartId: value.sourceChartId || null }
+      : null;
+  }
   if (value.type !== 'position' || !['long', 'short'].includes(value.side)) return null;
   const entryPrice = Number(value.entryPrice);
   const stopPrice = Number(value.stopPrice);
@@ -64,6 +79,14 @@ export class DrawingAdapter {
     return this.add({ type: 'level', price, id });
   }
 
+  createHorizontalRay(price, startTime, id) {
+    return this.add({ type: 'horizontalRay', price, startTime, id });
+  }
+
+  createTrendLine(values, id) {
+    return this.add({ type: 'trendLine', ...values, id });
+  }
+
   createLongShort(side, values, id) {
     return this.add({ type: 'position', side, ...values, id });
   }
@@ -108,6 +131,16 @@ export class DrawingAdapter {
     const removed = this.drawings.filter((drawing) => drawing.type === type);
     if (removed.length === 0) return false;
     this.drawings = this.drawings.filter((drawing) => drawing.type !== type);
+    removed.forEach((drawing) => this.emitEvent('removed', drawing));
+    this.emit();
+    return true;
+  }
+
+  removeByTypes(types) {
+    const typeSet = new Set(types);
+    const removed = this.drawings.filter((drawing) => typeSet.has(drawing.type));
+    if (removed.length === 0) return false;
+    this.drawings = this.drawings.filter((drawing) => !typeSet.has(drawing.type));
     removed.forEach((drawing) => this.emitEvent('removed', drawing));
     this.emit();
     return true;

@@ -306,7 +306,9 @@ export class BacktestEngine {
   clearDrawingsByType(type) {
     if (!['position', 'level'].includes(type)) return false;
     this.mode = null;
-    const removed = this.drawingAdapter.removeByType(type);
+    const removed = type === 'level'
+      ? this.drawingAdapter.removeByTypes(['level', 'horizontalRay', 'trendLine'])
+      : this.drawingAdapter.removeByType(type);
     if (!removed) this.emit();
     return removed;
   }

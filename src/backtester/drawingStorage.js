@@ -7,6 +7,21 @@ function normalizeDrawing(value) {
   if (value.type === 'level') {
     return Number.isFinite(Number(value.price)) ? { ...value, price: Number(value.price), sourceChartId: value.sourceChartId || null } : null;
   }
+  if (value.type === 'horizontalRay') {
+    const price = Number(value.price);
+    const startTime = Number(value.startTime);
+    return Number.isFinite(price) && price > 0 && Number.isFinite(startTime)
+      ? { ...value, price, startTime, sourceChartId: value.sourceChartId || null }
+      : null;
+  }
+  if (value.type === 'trendLine') {
+    const prices = [Number(value.startPrice), Number(value.endPrice)];
+    const times = [Number(value.startTime), Number(value.endTime)];
+    return prices.every((price) => Number.isFinite(price) && price > 0)
+      && times.every((time) => Number.isFinite(time))
+      ? { ...value, startPrice: prices[0], endPrice: prices[1], startTime: times[0], endTime: times[1], sourceChartId: value.sourceChartId || null }
+      : null;
+  }
   if (value.type !== 'position' || !['long', 'short'].includes(value.side)) return null;
   const prices = ['entryPrice', 'stopPrice', 'targetPrice'].map((key) => Number(value[key]));
   if (prices.some((price) => !Number.isFinite(price) || price <= 0)) return null;
