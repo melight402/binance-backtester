@@ -25,7 +25,7 @@ export const INTERVAL_SECONDS = {
 };
 
 // Intervals offered in the header timeframe dropdown (drives the top chart).
-export const TOP_TIMEFRAME_OPTIONS = ['1m', '3m', '5m', '15m', '30m', '1h', '4h', '1d', '1w', '1M'];
+export const TOP_TIMEFRAME_OPTIONS = ['5m', '1h', '1d'];
 
 // The two fixed context charts at the bottom.
 export const FIXED_INTERVALS = { hour: '1h', day: '1d' };
@@ -53,7 +53,8 @@ export const CONTEXT_BARS = 200;
 export const MIN_BARS_AHEAD = 100;
 
 // Max candles kept per (symbol, interval) series before trimming the tail end.
-export const MAX_KEPT_BARS = 12000;
+export const MAX_ACTIVE_BARS = 20000;
+export const AHEAD_BUFFER_BARS = 1000;
 
 // Klines page size requested per API call (Binance USDT-M futures max is 1500).
 export const KLINES_PAGE_LIMIT = 1000;

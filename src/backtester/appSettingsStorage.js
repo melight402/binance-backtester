@@ -14,6 +14,7 @@ const DEFAULT_SETTINGS = {
   rr: 2,
   riskUsdt: 10,
   profitLoss: 'profit',
+  dataMode: 'local',
 };
 
 export function normalizeAppSettings(value) {
@@ -30,6 +31,7 @@ export function normalizeAppSettings(value) {
     rr: Number.isFinite(Number(value?.rr)) ? Math.max(0.1, Math.min(20, Number(value.rr))) : DEFAULT_SETTINGS.rr,
     riskUsdt: Number.isFinite(Number(value?.riskUsdt)) ? Math.max(0.01, Math.min(1000000, Number(value.riskUsdt))) : DEFAULT_SETTINGS.riskUsdt,
     profitLoss: VALID_PROFIT_LOSS.has(value?.profitLoss) ? value.profitLoss : DEFAULT_SETTINGS.profitLoss,
+    dataMode: value?.dataMode === 'online' ? 'online' : DEFAULT_SETTINGS.dataMode,
   };
 }
 

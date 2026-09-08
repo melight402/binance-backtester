@@ -2,7 +2,7 @@
 // [time, open, high, low, close, volume] tuples to save space, and
 // converted back to objects on read.
 
-import { LS_PREFIX, MAX_KEPT_BARS } from './config.js';
+import { LS_PREFIX, MAX_ACTIVE_BARS } from './config.js';
 import { normalizeCandles } from './candleModel.js';
 import { readJson, removeStorage, writeJson } from '../services/storage.js';
 
@@ -16,8 +16,8 @@ export function loadCandles(symbol, interval) {
 
 export function saveCandles(symbol, interval, candles) {
   const normalized = normalizeCandles(candles);
-  const trimmed = normalized.length > MAX_KEPT_BARS
-    ? normalized.slice(normalized.length - MAX_KEPT_BARS)
+  const trimmed = normalized.length > MAX_ACTIVE_BARS
+    ? normalized.slice(normalized.length - MAX_ACTIVE_BARS)
     : normalized;
   const compact = trimmed.map((c) => [c.time, c.open, c.high, c.low, c.close, c.volume]);
   writeJson(cacheKey(symbol, interval), compact);
