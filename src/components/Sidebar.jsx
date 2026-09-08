@@ -1,7 +1,8 @@
 // src/components/Sidebar.jsx
-import { createSignal, onCleanup, onMount, For } from 'solid-js';
-import { currentPair, setCurrentPair } from '../services/store.js';
+import { createSignal, createEffect, onCleanup, For } from 'solid-js';
+import { currentPair, dataMode, setCurrentPair } from '../services/store.js';
 import { dataManager } from '../backtester/dataManager.js';
+import { loadOfflineSymbols } from '../backtester/offlineMetadata.js';
 import { binanceApi } from '../backtester/binanceApi.js';
 import { loadFavorites, saveFavorites } from '../backtester/favoritesStorage.js';
 
@@ -11,18 +12,41 @@ export function Sidebar() {
   const [searchQuery, setSearchQuery] = createSignal(''); // Строка поиска
   const [loadError, setLoadError] = createSignal(null);
   let loadController;
+  let loadGeneration = 0;
 
-  onMount(async () => {
+  createEffect(() => {
+    const mode = dataMode();
+    const generation = ++loadGeneration;
+    loadController?.abort();
     loadController = new AbortController();
-    try {
-      const pairs = await binanceApi.getTradingPairs({ signal: loadController.signal });
-      if (loadController.signal.aborted) return;
-      setAllPairs(pairs);
-    } catch (err) {
-      if (err.name !== 'AbortError') {
-        setLoadError(err.message || 'Не удалось загрузить торговые пары');
+    setLoadError(null);
+
+    const loadPairs = async () => {
+      try {
+        const localPairs = await loadOfflineSymbols();
+        if (generation !== loadGeneration || loadController.signal.aborted) return;
+        const normalizedLocal = Array.isArray(localPairs) ? localPairs : Object.keys(localPairs || {});
+        setAllPairs(normalizedLocal);
+
+        if (mode !== 'online') return;
+
+        try {
+          const onlinePairs = await binanceApi.getTradingPairs({ signal: loadController.signal });
+          if (generation !== loadGeneration || loadController.signal.aborted) return;
+          setAllPairs([...new Set([...normalizedLocal, ...onlinePairs])].sort());
+        } catch (error) {
+          if (error.name !== 'AbortError' && generation === loadGeneration) {
+            setLoadError(`Binance: ${error.message || 'не удалось обновить список пар'}`);
+          }
+        }
+      } catch (error) {
+        if (error.name !== 'AbortError' && generation === loadGeneration) {
+          setLoadError(error.message || 'Не удалось загрузить локальные торговые пары');
+        }
       }
-    }
+    };
+
+    loadPairs();
   });
 
   onCleanup(() => loadController?.abort());

@@ -1,8 +1,8 @@
 // src/components/Header.jsx
 import { createEffect, createSignal, onCleanup, onMount } from 'solid-js';
-import { isPlaying, setIsPlaying, timeframe, setTimeframe, currentPair, showSidebar, setShowSidebar, showSubCharts, setShowSubCharts, simulationSpeed, setSimulationSpeed, activeTool, setActiveTool, maSettings, setMaSettings, selectedStartTime, setSelectedStartTime, positionSettings, setPositionSettings, profitLoss, setProfitLoss, drawings, selectedDrawingId, setSelectedDrawingId, tvxValue, setTvxValue } from '../services/store.js';
+import { isPlaying, setIsPlaying, timeframe, setTimeframe, currentPair, showSidebar, setShowSidebar, showSubCharts, setShowSubCharts, simulationSpeed, setSimulationSpeed, activeTool, setActiveTool, maSettings, setMaSettings, selectedStartTime, setSelectedStartTime, positionSettings, setPositionSettings, profitLoss, setProfitLoss, drawings, selectedDrawingId, setSelectedDrawingId, tvxValue, setTvxValue, dataMode, setDataMode } from '../services/store.js';
 import { TVX_OPTIONS } from '../constants/tvxOptions.js';
-import { TOP_TIMEFRAME_OPTIONS } from '../backtester/config.js';
+import { INTERVAL_SECONDS, TOP_TIMEFRAME_OPTIONS } from '../backtester/config.js';
 import { dataManager } from '../backtester/dataManager.js';
 import { calculatePositionNotional, calculatePositionQuantity, normalizePositionPrices, resolvePositionToolPrices } from '../backtester/positionCalculations.js';
 import { getSymbolPrecision } from '../backtester/precisionCache.js';
@@ -59,8 +59,49 @@ export function Header() {
       togglePlay();
     };
 
+    const handleToolShortcuts = (event) => {
+      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+
+      const target = event.target;
+      if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement
+        || target instanceof HTMLTextAreaElement || target.isContentEditable
+        || target instanceof HTMLButtonElement) return;
+
+      const key = event.key?.toLowerCase();
+      const mapping = {
+        h: 'hline',
+        j: 'ray',
+        k: 'trendline',
+        c: null,
+      };
+
+      if (key === 'l') {
+        event.preventDefault();
+        dataManager.clearDrawings();
+        setSelectedDrawingId(null);
+        setActiveTool(null);
+        dataManager.setMode(null);
+        return;
+      }
+
+      if (!(key in mapping)) return;
+      event.preventDefault();
+
+      if (mapping[key] === null) {
+        setActiveTool(null);
+        dataManager.setMode(null);
+        return;
+      }
+
+      toggleTool(mapping[key]);
+    };
+
     window.addEventListener('keydown', handleSpaceKey);
-    onCleanup(() => window.removeEventListener('keydown', handleSpaceKey));
+    window.addEventListener('keydown', handleToolShortcuts);
+    onCleanup(() => {
+      window.removeEventListener('keydown', handleSpaceKey);
+      window.removeEventListener('keydown', handleToolShortcuts);
+    });
   });
   
   // 1. Управление плеером симуляции
@@ -79,6 +120,12 @@ export function Header() {
     const newTf = e.target.value;
     setTimeframe(newTf);
     dataManager.changeTimeframe(newTf);
+  };
+
+  const handleDataModeChange = (event) => {
+    const mode = event.currentTarget.value;
+    setDataMode(mode);
+    dataManager.setDataMode(mode);
   };
 
   // 3. Изменение скорости воспроизведения
@@ -166,6 +213,10 @@ export function Header() {
     '1M': '1 месяц',
   }[value] || value);
 
+  const timeframeOptions = () => dataMode() === 'online'
+    ? Object.keys(INTERVAL_SECONDS)
+    : TOP_TIMEFRAME_OPTIONS;
+
   const openLatestPosition = async () => {
     const drawing = [...drawings()].reverse().find((item) => item.type === 'position');
     if (!drawing) {
@@ -178,7 +229,7 @@ export function Header() {
     workflowController = new AbortController();
     let precision;
     try {
-      precision = await getSymbolPrecision(currentPair(), { signal: workflowController.signal });
+      precision = await getSymbolPrecision(currentPair(), { signal: workflowController.signal, mode: dataMode() });
       const prices = normalizePositionPrices(drawing.entryPrice, drawing.stopPrice, drawing.targetPrice, precision?.tickSize);
       const quantity = calculatePositionQuantity(positionSettings().riskUsdt, prices.entryPrice, prices.stopLossPrice, precision?.stepSize);
       if (!(quantity > 0)) {
@@ -256,7 +307,7 @@ export function Header() {
         if (!shouldContinue) return;
       }
 
-      const precision = await getSymbolPrecision(currentPair(), { signal: workflowController.signal });
+      const precision = await getSymbolPrecision(currentPair(), { signal: workflowController.signal, mode: dataMode() });
 
       const closeData = {
         symbol: positionData.symbol,
@@ -320,31 +371,31 @@ export function Header() {
           🔴
         </button>
         <button 
-          onClick={() => toggleTool('level')} 
-          class={activeTool() === 'level' ? 'active' : ''}
+          onClick={() => toggleTool('hline')} 
+          class={activeTool() === 'hline' ? 'active' : ''}
           aria-label="Уровень"
           title="Уровень"
-          style={{ "background-color": activeTool() === 'level' ? '#2962ff' : '#2a2e39' }}
+          style={{ "background-color": activeTool() === 'hline' ? '#2962ff' : '#2a2e39' }}
         >
           📍
         </button>
         <button 
-          onClick={() => toggleTool('horizontalRay')} 
-          class={activeTool() === 'horizontalRay' ? 'active' : ''}
+          onClick={() => toggleTool('ray')} 
+          class={activeTool() === 'ray' ? 'active' : ''}
           aria-label="Горизонтальный луч"
           title="Горизонтальный луч"
-          style={{ "background-color": activeTool() === 'horizontalRay' ? '#2962ff' : '#2a2e39' }}
+          style={{ "background-color": activeTool() === 'ray' ? '#2962ff' : '#2a2e39' }}
         >
           ➡️
         </button>
         <button 
-          onClick={() => toggleTool('trendLine')} 
-          class={activeTool() === 'trendLine' ? 'active' : ''}
-          aria-label="Трендовая линия"
-          title="Трендовая линия"
-          style={{ "background-color": activeTool() === 'trendLine' ? '#2962ff' : '#2a2e39' }}
+          onClick={() => toggleTool('trendline')} 
+          class={activeTool() === 'trendline' ? 'active' : ''}
+          aria-label="Трендлиния"
+          title="Трендлиния"
+          style={{ "background-color": activeTool() === 'trendline' ? '#ffb300' : '#2a2e39' }}
         >
-          📐
+          📈
         </button>
         <button 
           onClick={handleDeleteSelected}
@@ -382,6 +433,14 @@ export function Header() {
           {TVX_OPTIONS.map((option) => (
             <option value={option.value}>{option.label}</option>
           ))}
+        </select>
+      </div>
+
+      <div class="flex-row align-center" style={{ gap: '6px' }}>
+        <label for="data-mode" style={{ "font-size": "12px", color: '#848e9c' }}>Данные</label>
+        <select id="data-mode" value={dataMode()} onChange={handleDataModeChange} title="Источник рыночных данных">
+          <option value="local">Local only</option>
+          <option value="online">Online update</option>
         </select>
       </div>
 
@@ -510,7 +569,7 @@ export function Header() {
         </span>
 
         <select value={timeframe()} onChange={handleTimeframeChange}>
-          {TOP_TIMEFRAME_OPTIONS.map((option) => (
+          {timeframeOptions().map((option) => (
             <option value={option}>{timeframeLabel(option)}</option>
           ))}
         </select>

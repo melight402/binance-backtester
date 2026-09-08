@@ -1,8 +1,11 @@
-import { createChart as createLibraryChart, ColorType, LineStyle } from 'trading-charts-with-tools';
+import { createChart as createLibraryChart, ColorType, LineStyle } from 'lightweight-charts';
 import { buildHmaLineData } from './backtester/indicators.js';
 import { buildSessionSeriesData } from './backtester/sessions.js';
 import { HMA_COLORS, HMA_PERIODS } from './backtester/config.js';
 import { loadChartState, saveChartState } from './backtester/chartStateStorage.js';
+import { createDrawingFromTool, hitTestDrawing } from './services/drawingInteraction.js';
+import { redrawCanvas } from './services/canvasDrawing.js';
+import { applyDragUpdate } from './services/drawingDrag.js';
 
 /**
  * Главная фабрика для создания изолированного инстанса графика
@@ -10,6 +13,7 @@ import { loadChartState, saveChartState } from './backtester/chartStateStorage.j
  * @param {Object} options - { symbol: 'BTCUSDT', timeframe: '1h', isMain: true }
  */
 export function createChart(container, options) {
+    const VOLUME_PANEL_HEIGHT_RATIO = 0.2;
     const chart = createLibraryChart(container, {
         autoSize: true,
         localization: {
@@ -74,7 +78,10 @@ export function createChart(container, options) {
     const volumeSeries = chart.addHistogramSeries({
         priceFormat: { type: 'volume' },
         priceScaleId: '',
-        scaleMargins: { top: 0.8, bottom: 0 },
+        scaleMargins: { top: 1 - VOLUME_PANEL_HEIGHT_RATIO, bottom: 0 },
+    });
+    volumeSeries.priceScale().applyOptions({
+        scaleMargins: { top: 1 - VOLUME_PANEL_HEIGHT_RATIO, bottom: 0 },
     });
 
     const hmaSeriesByPeriod = Object.fromEntries(HMA_PERIODS.map((period) => [
@@ -115,10 +122,9 @@ export function createChart(container, options) {
     let saveStateTimer = null;
     let lastSavedRangeKey = '';
     let activeTool = null;
-    let pendingTrendPoint = null;
-    let pendingTrendPointElement = null;
-    let pendingTrendPreviewElement = null;
     let selectedDrawingId = null;
+    let dragState = null;
+    let draftTrendLine = null;
     const levels = [];
     const horizontalRays = [];
     const trendLines = [];
@@ -127,13 +133,25 @@ export function createChart(container, options) {
     const overlay = document.createElement('div');
     overlay.className = 'chart-drawing-overlay';
     container.appendChild(overlay);
+    const drawingCanvas = document.createElement('canvas');
+    drawingCanvas.className = 'chart-drawing-canvas';
+    drawingCanvas.style.position = 'absolute';
+    drawingCanvas.style.inset = '0';
+    drawingCanvas.style.pointerEvents = 'none';
+    overlay.appendChild(drawingCanvas);
+    const drawingCtx = drawingCanvas.getContext('2d');
+    const syncCanvasSize = () => {
+        const ratio = window.devicePixelRatio || 1;
+        drawingCanvas.width = Math.max(1, Math.floor(container.clientWidth * ratio));
+        drawingCanvas.height = Math.max(1, Math.floor(container.clientHeight * ratio));
+        drawingCanvas.style.width = `${container.clientWidth}px`;
+        drawingCanvas.style.height = `${container.clientHeight}px`;
+        if (drawingCtx) drawingCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    };
     const ohlcLegend = document.createElement('div');
     ohlcLegend.className = 'chart-ohlc-legend';
     container.appendChild(ohlcLegend);
     const resizeObserver = new ResizeObserver(() => {
-        const width = container.clientWidth;
-        const height = container.clientHeight;
-        if (width > 0 && height > 0) chart.resize(width, height);
         repositionPositions();
     });
 
@@ -161,55 +179,12 @@ export function createChart(container, options) {
         return timeScale.timeToCoordinate(previousCandle.time);
     };
 
-    const setTrendLineGeometry = (element, startX, startY, endX, endY) => {
-        const width = Math.hypot(endX - startX, endY - startY);
-        const angle = Math.atan2(endY - startY, endX - startX);
-        element.style.left = `${startX}px`;
-        element.style.top = `${startY}px`;
-        element.style.width = `${width}px`;
-        element.style.transform = `rotate(${angle}rad)`;
-        element.style.transformOrigin = '0 0';
-        element.style.display = 'block';
-    };
-
     const normalizeChartTime = (time) => {
         if (Number.isFinite(time)) return time;
         if (time && typeof time === 'object' && Number.isFinite(time.year)) {
             return Date.UTC(time.year, time.month - 1, time.day) / 1000;
         }
         return null;
-    };
-
-    const clearPendingTrendPreview = () => {
-        pendingTrendPointElement?.remove();
-        pendingTrendPreviewElement?.remove();
-        pendingTrendPointElement = null;
-        pendingTrendPreviewElement = null;
-    };
-
-    const updatePendingTrendPreview = (param) => {
-        if (!pendingTrendPoint || !param?.point) return;
-        const currentPrice = candlestickSeries.coordinateToPrice(param.point.y);
-        const currentTime = param.time ?? candlesData[candlesData.length - 1]?.time;
-        const startX = timeToDrawingCoordinate(pendingTrendPoint.time);
-        const startY = candlestickSeries.priceToCoordinate(pendingTrendPoint.price);
-        const endX = timeToDrawingCoordinate(currentTime);
-        const endY = candlestickSeries.priceToCoordinate(currentPrice);
-        if ([startX, startY, endX, endY].some((value) => value == null)) return;
-        if (!pendingTrendPointElement) {
-            pendingTrendPointElement = document.createElement('div');
-            pendingTrendPointElement.className = 'trend-line-point';
-            overlay.appendChild(pendingTrendPointElement);
-        }
-        pendingTrendPointElement.style.left = `${startX}px`;
-        pendingTrendPointElement.style.top = `${startY}px`;
-        pendingTrendPointElement.style.display = 'block';
-        if (!pendingTrendPreviewElement) {
-            pendingTrendPreviewElement = document.createElement('div');
-            pendingTrendPreviewElement.className = 'trend-line trend-line-preview';
-            overlay.appendChild(pendingTrendPreviewElement);
-        }
-        setTrendLineGeometry(pendingTrendPreviewElement, startX, startY, endX, endY);
     };
 
     function renderOhlcLegend(candle) {
@@ -251,11 +226,9 @@ export function createChart(container, options) {
     const handleCrosshairMove = (param) => {
         if (!param?.point) {
             renderOhlcLegend(null);
-            updatePendingTrendPreview(null);
             return;
         }
         renderOhlcLegend(candleFromCrosshairParam(param));
-        updatePendingTrendPreview(param);
     };
 
     function placeBox(element, left, width, firstY, secondY) {
@@ -266,52 +239,67 @@ export function createChart(container, options) {
         element.style.height = `${Math.abs(secondY - firstY)}px`;
     }
 
-    function repositionPositions() {
-        levels.forEach((level) => {
-            const y = candlestickSeries.priceToCoordinate(level.price);
-            if (y == null) {
-                level.handle.style.display = 'none';
-                return;
-            }
-            level.handle.style.left = '3px';
-            level.handle.style.top = `${y - 7}px`;
-            level.handle.style.display = 'block';
+    function redrawCanvasLayer() {
+        if (!drawingCtx) return;
+        syncCanvasSize();
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+        drawingCtx.clearRect(0, 0, width, height);
+        const geometry = {
+            width,
+            toX: (time) => timeToDrawingCoordinate(time),
+            fromX: (x) => normalizeChartTime(chart.timeScale().coordinateToTime(x)),
+            toY: (value) => candlestickSeries.priceToCoordinate(value),
+            fromY: (y) => candlestickSeries.coordinateToPrice(y),
+        };
+        const model = [
+            ...levels.map((level) => ({ id: level.id, type: 'hline', price: level.price })),
+            ...horizontalRays.map((ray) => ({ id: ray.id, type: 'ray', time: ray.startTime, price: ray.price })),
+            ...trendLines.map((line) => ({ id: line.id, type: 'trendline', p1: line.p1, p2: line.p2 })),
+            ...(draftTrendLine ? [{ id: draftTrendLine.id, type: 'trendline', p1: draftTrendLine.p1, p2: draftTrendLine.p2 }] : []),
+        ];
+        redrawCanvas({
+            ctx: drawingCtx,
+            width,
+            height,
+            drawings: model,
+            selectedId: selectedDrawingId,
+            geometry,
+            formatPrice,
+            rrRatio: (entry, stop, pt) => Math.abs(pt - entry) / Math.max(Math.abs(entry - stop), Number.EPSILON),
+            positionSizeUSDT: (riskUsdt, entry, stop) => (riskUsdt / Math.max(Math.abs(entry - stop), Number.EPSILON)),
+            riskUsdt: 10,
         });
-        horizontalRays.forEach((ray) => {
-            const y = candlestickSeries.priceToCoordinate(ray.price);
-            if (y == null) {
-                ray.element.style.display = 'none';
+        if (positions.length === 0) return;
+        const pane = { width, height };
+        const timeScale = chart.timeScale();
+        positions.forEach((position) => {
+            const left = timeScale.timeToCoordinate(position.entryTime);
+            const entryY = candlestickSeries.priceToCoordinate(position.entryPrice);
+            const stopY = candlestickSeries.priceToCoordinate(position.stopPrice);
+            const targetY = candlestickSeries.priceToCoordinate(position.targetPrice);
+            if ([left, entryY, stopY, targetY].some((value) => value == null)) {
+                position.elements.forEach((element) => { element.style.display = 'none'; });
                 return;
             }
-            const startX = timeToDrawingCoordinate(ray.startTime);
-            if (startX == null || startX >= container.clientWidth) {
-                ray.element.style.display = 'none';
-                return;
-            }
-            const left = Math.max(0, startX);
-            ray.element.style.left = `${left}px`;
-            ray.element.style.top = `${y - 1}px`;
-            ray.element.style.width = `${Math.max(0, container.clientWidth - left)}px`;
-            ray.element.style.display = 'block';
-        });
-        trendLines.forEach((trendLine) => {
-            const startX = timeToDrawingCoordinate(trendLine.startTime);
-            const endX = timeToDrawingCoordinate(trendLine.endTime);
-            const startY = candlestickSeries.priceToCoordinate(trendLine.startPrice);
-            const endY = candlestickSeries.priceToCoordinate(trendLine.endPrice);
-            if ([startX, endX, startY, endY].some((value) => value == null)) {
-                trendLine.element.style.display = 'none';
-                return;
-            }
-            setTrendLineGeometry(trendLine.element, startX, startY, endX, endY);
-            trendLine.handles.forEach((handle, index) => {
-                const handleX = index === 0 ? startX : endX;
-                const handleY = index === 0 ? startY : endY;
-                handle.style.left = `${handleX}px`;
-                handle.style.top = `${handleY}px`;
-                handle.style.display = trendLine.id === selectedDrawingId ? 'block' : 'none';
+            const boxLeft = Math.max(0, left);
+            const boxWidth = Math.max(0, pane.width - boxLeft);
+            placeBox(position.riskBox, boxLeft, boxWidth, entryY, stopY);
+            placeBox(position.rewardBox, boxLeft, boxWidth, entryY, targetY);
+            position.handles.forEach((handle, index) => {
+                const handleY = [entryY, stopY, targetY][index];
+                handle.style.left = `${Math.max(3, boxLeft - 7)}px`;
+                handle.style.top = `${handleY - 7}px`;
+                handle.style.display = 'block';
             });
+            position.label.style.left = `${boxLeft + 6}px`;
+            position.label.style.top = `${Math.max(2, Math.min(entryY, stopY, targetY) - 42)}px`;
+            position.label.style.display = 'block';
         });
+    }
+
+    function repositionPositions() {
+        redrawCanvasLayer();
         if (positions.length === 0) return;
         const pane = { width: container.clientWidth, height: container.clientHeight };
         const timeScale = chart.timeScale();
@@ -341,37 +329,30 @@ export function createChart(container, options) {
     }
 
     const removeAllDrawings = () => {
-        levels.forEach((level) => candlestickSeries.removePriceLine(level.line));
-        levels.forEach((level) => level.handle.remove());
-        levels.length = 0;
-        horizontalRays.forEach((ray) => ray.element.remove());
-        horizontalRays.length = 0;
-        trendLines.forEach((trendLine) => {
-            trendLine.element.remove();
-            trendLine.handles.forEach((handle) => handle.remove());
+        levels.forEach((level) => {
+            if (level.line) candlestickSeries.removePriceLine(level.line);
         });
+        levels.length = 0;
+        horizontalRays.length = 0;
         trendLines.length = 0;
+        draftTrendLine = null;
         positions.forEach((position) => {
             position.lines.forEach((line) => candlestickSeries.removePriceLine(line));
             position.elements.forEach((element) => element.remove());
         });
         positions.length = 0;
+        redrawCanvasLayer();
     };
 
     const applySelectionStyles = () => {
         levels.forEach((level) => {
+            if (!level.line) return;
             level.line.applyOptions({
                 color: level.id === selectedDrawingId ? '#ffffff' : '#e8b339',
                 lineWidth: level.id === selectedDrawingId ? 3 : 2,
             });
         });
-        horizontalRays.forEach((ray) => {
-            ray.element.classList.toggle('horizontal-ray-selected', ray.id === selectedDrawingId);
-        });
-        trendLines.forEach((trendLine) => {
-            trendLine.element.classList.toggle('trend-line-selected', trendLine.id === selectedDrawingId);
-        });
-        repositionPositions();
+        redrawCanvasLayer();
         positions.forEach((position) => {
             position.label.classList.toggle('position-label-selected', position.id === selectedDrawingId);
         });
@@ -385,108 +366,21 @@ export function createChart(container, options) {
     };
 
     const addLevel = (price, drawingId = null) => {
-        const line = candlestickSeries.createPriceLine({
-            price,
-            color: '#e8b339',
-            lineWidth: 2,
-            lineStyle: LineStyle.Dashed,
-            axisLabelVisible: true,
-            title: 'Level',
-        });
-        const handle = document.createElement('div');
-        handle.className = 'level-handle';
-        handle.addEventListener('pointerdown', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            activeTool = null;
-            options.onToolUsed?.();
-            const move = (moveEvent) => {
-                const nextPrice = candlestickSeries.coordinateToPrice(
-                    moveEvent.clientY - container.getBoundingClientRect().top,
-                );
-                if (!Number.isFinite(nextPrice) || nextPrice <= 0) return;
-                levels.find((item) => item.handle === handle).price = nextPrice;
-                line.applyOptions({ price: nextPrice });
-                repositionPositions();
-            };
-            const stop = () => {
-                window.removeEventListener('pointermove', move);
-                window.removeEventListener('pointerup', stop);
-                const currentLevel = levels.find((item) => item.handle === handle);
-                if (currentLevel?.id) options.onDrawingModified?.(currentLevel.id, { price: currentLevel.price });
-            };
-            window.addEventListener('pointermove', move);
-            window.addEventListener('pointerup', stop, { once: true });
-        });
-        overlay.appendChild(handle);
-        levels.push({ id: drawingId, price, line, handle });
+        levels.push({ id: drawingId, price, line: null, handle: null });
         applySelectionStyles();
         repositionPositions();
     };
 
     const addHorizontalRay = (price, startTime, drawingId = null) => {
-        const element = document.createElement('div');
-        element.className = 'horizontal-ray';
-        element.addEventListener('pointerdown', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            if (drawingId) selectDrawing(drawingId);
-        });
-        overlay.appendChild(element);
-        horizontalRays.push({ id: drawingId, price, startTime, element });
+        horizontalRays.push({ id: drawingId, price, startTime, element: null });
         applySelectionStyles();
         repositionPositions();
     };
 
-    const addTrendLine = (drawing, drawingId = null) => {
-        const element = document.createElement('div');
-        element.className = 'trend-line';
-        element.addEventListener('pointerdown', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            if (drawingId) selectDrawing(drawingId);
-        });
-        overlay.appendChild(element);
-        const trendLine = { ...drawing, id: drawingId, element, handles: [] };
-        ['start', 'end'].forEach((pointName) => {
-            const handle = document.createElement('div');
-            handle.className = `trend-line-handle trend-line-handle-${pointName}`;
-            handle.addEventListener('pointerdown', (event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                if (drawingId) selectDrawing(drawingId);
-                activeTool = null;
-                options.onToolUsed?.();
-                const move = (moveEvent) => {
-                    const rect = container.getBoundingClientRect();
-                    const x = moveEvent.clientX - rect.left;
-                    const y = moveEvent.clientY - rect.top;
-                    const price = candlestickSeries.coordinateToPrice(y);
-                    const time = normalizeChartTime(chart.timeScale().coordinateToTime(x));
-                    if (!Number.isFinite(price) || !Number.isFinite(time)) return;
-                    trendLine[`${pointName}Price`] = price;
-                    trendLine[`${pointName}Time`] = time;
-                    repositionPositions();
-                };
-                const stop = () => {
-                    window.removeEventListener('pointermove', move);
-                    window.removeEventListener('pointerup', stop);
-                    if (drawingId) options.onDrawingModified?.(drawingId, {
-                        startPrice: trendLine.startPrice,
-                        startTime: trendLine.startTime,
-                        endPrice: trendLine.endPrice,
-                        endTime: trendLine.endTime,
-                    });
-                };
-                window.addEventListener('pointermove', move);
-                window.addEventListener('pointerup', stop, { once: true });
-            });
-            overlay.appendChild(handle);
-            trendLine.handles.push(handle);
-        });
-        trendLines.push(trendLine);
+    const addTrendLine = (p1, p2, drawingId = null) => {
+        trendLines.push({ id: drawingId, p1: { ...p1 }, p2: { ...p2 } });
         applySelectionStyles();
-        repositionPositions();
+        redrawCanvasLayer();
     };
 
     const updatePositionLabel = (position) => {
@@ -582,16 +476,17 @@ export function createChart(container, options) {
     };
 
     const createDrawing = (drawing) => {
-        if (drawing.type === 'level') {
+        const type = drawing?.type === 'level' ? 'hline' : drawing?.type === 'horizontalRay' ? 'ray' : drawing?.type;
+        if (type === 'hline') {
             addLevel(drawing.price, drawing.id);
         }
-        if (drawing.type === 'horizontalRay') {
+        if (type === 'ray') {
             addHorizontalRay(drawing.price, drawing.startTime, drawing.id);
         }
-        if (drawing.type === 'trendLine') {
-            addTrendLine(drawing, drawing.id);
+        if (type === 'trendline') {
+            addTrendLine(drawing.p1 ?? { time: drawing.time, price: drawing.price }, drawing.p2 ?? { time: drawing.time, price: drawing.price }, drawing.id);
         }
-        if (drawing.type === 'position') {
+        if (type === 'position') {
             addPosition(drawing.side, drawing.entryPrice, drawing.entryTime, drawing.stopPrice, drawing.targetPrice, drawing.id);
         }
     };
@@ -611,12 +506,132 @@ export function createChart(container, options) {
         return nearest;
     };
 
-    const handleChartClick = (param) => {
+    const normalizeTool = (tool) => {
+        if (!tool) return null;
+        const value = String(tool).trim();
+        if (!value) return null;
+        const lower = value.toLowerCase();
+        if (lower === 'level' || lower === 'hline') return 'hline';
+        if (lower === 'horizontalray' || lower === 'horizontal_ray' || lower === 'horizontal-ray' || lower === 'ray') return 'ray';
+        if (lower === 'trendline' || lower === 'trend-line' || lower === 'trend_line') return 'trendline';
+        return lower;
+    };
+
+    const getPointerPoint = (event) => {
+        const rect = container.getBoundingClientRect();
+        return {
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top,
+        };
+    };
+
+    const findDrawingById = (drawingId) => {
+        if (!drawingId) return null;
+        return [
+            ...levels.map((level) => ({ ...level, type: 'hline', price: level.price })),
+            ...horizontalRays.map((ray) => ({ ...ray, type: 'ray', price: ray.price, time: ray.startTime })),
+            ...trendLines.map((line) => ({ ...line, type: 'trendline' })),
+            ...positions.map((position) => ({
+                ...position,
+                type: position.side,
+                entry: position.entryPrice,
+                stop: position.stopPrice,
+                pt: position.targetPrice,
+                entryTime: position.entryTime,
+            })),
+        ].find((drawing) => drawing.id === drawingId) || null;
+    };
+
+    const updateDraggedDrawing = (pointer) => {
+        if (!dragState) return;
+        const { id, mode, original } = dragState;
+        const target = findDrawingById(id);
+        if (!target) return;
+
+        const next = applyDragUpdate(original || target, mode, pointer, {
+            width: container.clientWidth,
+            toX: (time) => timeToDrawingCoordinate(time),
+            fromX: (x) => normalizeChartTime(chart.timeScale().coordinateToTime(x)),
+            toY: (value) => candlestickSeries.priceToCoordinate(value),
+            fromY: (y) => candlestickSeries.coordinateToPrice(y),
+        }, {
+            original: original || target,
+            anchorTime: dragState.anchorTime ?? null,
+            anchorPrice: dragState.anchorPrice ?? null,
+        });
+
+        if (target.type === 'hline' || target.type === 'ray') {
+            const match = horizontalRays.find((ray) => ray.id === id) || levels.find((level) => level.id === id);
+            if (match) {
+                if ('price' in next) match.price = next.price;
+                if ('time' in next) match.startTime = next.time;
+                if (mode === 'ray-anchor' || mode === 'ray-body') queryRayState(match, next);
+            }
+        }
+
+        if (target.type === 'trendline') {
+            const match = trendLines.find((line) => line.id === id);
+            if (match) {
+                if ('p1' in next) match.p1 = next.p1;
+                if ('p2' in next) match.p2 = next.p2;
+            }
+        }
+
+        if (target.type === 'long' || target.type === 'short') {
+            const match = positions.find((position) => position.id === id);
+            if (match) {
+                if ('entry' in next) match.entryPrice = next.entry;
+                if ('stop' in next) match.stopPrice = next.stop;
+                if ('pt' in next) match.pt = next.pt;
+                if ('entryTime' in next) match.entryTime = next.entryTime;
+                if ('endTime' in next) match.endTime = next.endTime;
+                updatePositionLabel(match);
+            }
+        }
+
+        repositionPositions();
+        options.onDrawingModified?.(id, next);
+    };
+
+    const queryRayState = (ray, next) => {
+        if (!ray) return;
+        if ('time' in next) ray.startTime = next.time;
+        if ('price' in next) ray.price = next.price;
+    };
+
+    const handleChartClick = (param, fromPointerDown = false) => {
         if (!param.point || candlesData.length === 0) return;
         const price = candlestickSeries.coordinateToPrice(param.point.y);
         if (!Number.isFinite(price)) return;
 
-        if (!activeTool) {
+        const geometry = {
+            width: container.clientWidth,
+            toX: (time) => timeToDrawingCoordinate(time),
+            fromX: (x) => normalizeChartTime(chart.timeScale().coordinateToTime(x)),
+            toY: (value) => candlestickSeries.priceToCoordinate(value),
+            fromY: (y) => candlestickSeries.coordinateToPrice(y),
+        };
+
+        const normalizedTool = normalizeTool(activeTool);
+        if (!normalizedTool) {
+            const hit = hitTestDrawing({ x: param.point.x, y: param.point.y }, [
+                ...levels.map((level) => ({ id: level.id, type: 'hline', price: level.price })),
+                ...horizontalRays.map((ray) => ({ id: ray.id, type: 'ray', time: ray.startTime, price: ray.price })),
+                ...trendLines.map((line) => ({ id: line.id, type: 'trendline', p1: line.p1, p2: line.p2 })),
+                ...positions.map((position) => ({ id: position.id, type: position.side, entry: position.entryPrice, stop: position.stopPrice, pt: position.targetPrice, entryTime: position.entryTime })),
+            ], geometry);
+            if (hit?.id) {
+                const original = findDrawingById(hit.id);
+                selectDrawing(hit.id);
+                dragState = {
+                    id: hit.id,
+                    mode: hit.mode,
+                    original,
+                    anchorTime: hit.anchorTime ?? (original?.time ?? original?.entryTime ?? original?.p1?.time ?? null),
+                    anchorPrice: hit.anchorPrice ?? (original?.price ?? original?.entry ?? original?.p1?.price ?? null),
+                };
+                return;
+            }
             const nearestLevel = findNearestLevel(price);
             if (nearestLevel?.id) {
                 selectDrawing(nearestLevel.id);
@@ -624,44 +639,59 @@ export function createChart(container, options) {
             return;
         }
 
-        const entryCandle = candlesData[candlesData.length - 1];
-        if (activeTool === 'trendLine') {
-            const point = { price, time: param.time ?? entryCandle.time };
-            if (!pendingTrendPoint) {
-                pendingTrendPoint = point;
-                updatePendingTrendPreview(param);
+        if (normalizedTool === 'trendline') {
+            const time = param.time ?? candlesData[candlesData.length - 1]?.time;
+            if (!draftTrendLine) {
+                draftTrendLine = {
+                    id: `draft-${Date.now()}`,
+                    type: 'trendline',
+                    p1: { time, price },
+                    p2: { time, price },
+                };
+                redrawCanvasLayer();
                 return;
             }
-            clearPendingTrendPreview();
+            const finalized = {
+                ...draftTrendLine,
+                p2: { time, price },
+            };
+            draftTrendLine = null;
             options.onDrawingCreated?.({
-                type: 'trendLine',
-                startPrice: pendingTrendPoint.price,
-                startTime: pendingTrendPoint.time,
-                endPrice: point.price,
-                endTime: point.time,
+                ...finalized,
+                type: 'trendline',
                 sourceChartId: options.type,
             });
-            pendingTrendPoint = null;
             activeTool = null;
             container.style.cursor = '';
             options.onToolUsed?.();
             return;
         }
-        if (activeTool === 'long' || activeTool === 'short') {
-            const risk = price * 0.01;
-            const drawing = { type: 'position', side: activeTool, entryPrice: price, entryTime: entryCandle.time,
-                stopPrice: activeTool === 'long' ? price - risk : price + risk,
-                targetPrice: activeTool === 'long' ? price + risk * positionSettings.rr : price - risk * positionSettings.rr,
-                sourceChartId: options.type };
-            options.onDrawingCreated?.(drawing);
+
+        const entryCandle = candlesData[candlesData.length - 1];
+        const base = { time: param.time ?? entryCandle.time, step: 3000 };
+        const drawing = createDrawingFromTool(normalizedTool, { x: param.point.x, y: param.point.y }, geometry, base);
+        if (drawing) {
+            if (normalizedTool === 'long' || normalizedTool === 'short') {
+                options.onDrawingCreated?.({
+                    ...drawing,
+                    type: 'position',
+                    side: normalizedTool,
+                    entryPrice: drawing.entry,
+                    stopPrice: drawing.stop,
+                    targetPrice: drawing.pt,
+                    sourceChartId: options.type,
+                });
+            } else {
+                options.onDrawingCreated?.({
+                    ...drawing,
+                    type: normalizedTool === 'hline' ? 'hline' : normalizedTool === 'ray' ? 'ray' : drawing.type,
+                    price: drawing.price ?? price,
+                    startTime: drawing.time ?? base.time,
+                    sourceChartId: options.type,
+                });
+            }
         }
-        if (activeTool === 'level') {
-            options.onDrawingCreated?.({ type: 'level', price, sourceChartId: options.type });
-        }
-        if (activeTool === 'horizontalRay') {
-            options.onDrawingCreated?.({ type: 'horizontalRay', price, startTime: param.time ?? entryCandle.time, sourceChartId: options.type });
-            return;
-        }
+
         activeTool = null;
         container.style.cursor = '';
         options.onToolUsed?.();
@@ -683,6 +713,90 @@ export function createChart(container, options) {
 
     chart.subscribeClick(handleChartClick);
     chart.subscribeCrosshairMove(handleCrosshairMove);
+
+    container.addEventListener('pointerdown', (event) => {
+        if (activeTool || !event.isPrimary) return;
+        const point = getPointerPoint(event);
+        const hit = hitTestDrawing(point, [
+            ...levels.map((level) => ({ id: level.id, type: 'hline', price: level.price })),
+            ...horizontalRays.map((ray) => ({ id: ray.id, type: 'ray', time: ray.startTime, price: ray.price })),
+            ...trendLines.map((line) => ({ id: line.id, type: 'trendline', p1: line.p1, p2: line.p2 })),
+            ...positions.map((position) => ({ id: position.id, type: position.side, entry: position.entryPrice, stop: position.stopPrice, pt: position.targetPrice, entryTime: position.entryTime })),
+        ], {
+            width: container.clientWidth,
+            toX: (time) => timeToDrawingCoordinate(time),
+            fromX: (x) => normalizeChartTime(chart.timeScale().coordinateToTime(x)),
+            toY: (value) => candlestickSeries.priceToCoordinate(value),
+            fromY: (y) => candlestickSeries.coordinateToPrice(y),
+        });
+        if (!hit) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const original = findDrawingById(hit.id);
+        selectDrawing(hit.id);
+        dragState = {
+            id: hit.id,
+            mode: hit.mode,
+            original,
+            anchorTime: hit.anchorTime ?? (original?.time ?? original?.entryTime ?? original?.p1?.time ?? null),
+            anchorPrice: hit.anchorPrice ?? (original?.price ?? original?.entry ?? original?.p1?.price ?? null),
+        };
+    }, { capture: true });
+
+    container.addEventListener('pointermove', (event) => {
+        if (activeTool === 'trendline' && draftTrendLine) {
+            const point = getPointerPoint(event);
+            const time = normalizeChartTime(chart.timeScale().coordinateToTime(point.x));
+            const price = candlestickSeries.coordinateToPrice(point.y);
+            if (Number.isFinite(time) && Number.isFinite(price)) {
+                draftTrendLine.p2 = { time, price };
+                redrawCanvasLayer();
+            }
+            return;
+        }
+        if (!dragState || activeTool) return;
+        const point = getPointerPoint(event);
+        event.preventDefault();
+        event.stopPropagation();
+        updateDraggedDrawing(point);
+    }, { capture: true });
+
+    window.addEventListener('pointerup', () => {
+        dragState = null;
+    });
+
+    window.addEventListener('keydown', (event) => {
+        const tag = document.activeElement?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || document.activeElement?.isContentEditable) return;
+
+        if (event.key === 'Escape') {
+            dragState = null;
+            draftTrendLine = null;
+            selectedDrawingId = null;
+            activeTool = null;
+            container.style.cursor = '';
+            options.onToolUsed?.();
+            applySelectionStyles();
+            return;
+        }
+
+        if (event.key === 'Delete' || event.key === 'Backspace') {
+            if (!selectedDrawingId) return;
+            const idToRemove = selectedDrawingId;
+            const removeMatch = (list) => {
+                const idx = list.findIndex((item) => item.id === idToRemove);
+                if (idx >= 0) list.splice(idx, 1);
+            };
+            removeMatch(levels);
+            removeMatch(horizontalRays);
+            removeMatch(trendLines);
+            removeMatch(positions);
+            selectedDrawingId = null;
+            applySelectionStyles();
+            options.onDrawingSelected?.(null);
+        }
+    });
+
     const saveVisibleRange = () => {
         const range = chart.timeScale().getVisibleLogicalRange();
         if (!range) return;
@@ -751,12 +865,11 @@ export function createChart(container, options) {
             });
         },
         setMode(mode) {
-            activeTool = mode;
-            if (mode !== 'trendLine') {
-                pendingTrendPoint = null;
-                clearPendingTrendPreview();
+            activeTool = normalizeTool(mode);
+            if (activeTool !== 'trendline') {
+                draftTrendLine = null;
             }
-            container.style.cursor = mode ? 'crosshair' : '';
+            container.style.cursor = activeTool ? 'crosshair' : '';
         },
         clearDrawings() {
             removeAllDrawings();
@@ -786,7 +899,6 @@ export function createChart(container, options) {
             positions.forEach(updatePositionLabel);
         },
         destroy() {
-            clearPendingTrendPreview();
             removeAllDrawings();
             resizeObserver.disconnect();
             clearTimeout(saveStateTimer);

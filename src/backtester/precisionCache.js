@@ -1,4 +1,5 @@
 import { fetchFuturesExchangeInfo } from './binanceApi.js';
+import { loadOfflinePrecision } from './offlineMetadata.js';
 
 let precisionBySymbol = null;
 let precisionLoadedAt = 0;
@@ -11,6 +12,9 @@ function readFilter(filters, filterType, field) {
 }
 
 export async function getSymbolPrecision(symbol, options) {
+  const localPrecision = await loadOfflinePrecision();
+  if (localPrecision?.[symbol]) return localPrecision[symbol];
+  if (options?.mode === 'local') return null;
   if (!precisionBySymbol || Date.now() - precisionLoadedAt >= PRECISION_TTL_MS) {
     const data = await fetchFuturesExchangeInfo(options);
     precisionBySymbol = new Map(

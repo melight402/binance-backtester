@@ -7,7 +7,7 @@ SolidJS history backtester with three synchronized chart panels.
 - `src/backtester/engine.js` owns simulation time, loading, aggregation, and drawings.
 - `src/backtester/dataManager.js` provides candle normalization, cache paging, and request cancellation.
 - `src/backtester/risk.js` and `src/backtester/positionCalculations.js` contain pure position sizing and precision logic.
-- `src/chart/chartAdapter.js` and `src/chart/drawingAdapter.js` isolate chart and drawing contracts from Solid components.
+- `src/chart/chartAdapter.js` provides a thin interface layer between chart and Solid components.
 - `src/services/store.js` is the serializable reactive bridge for Solid components.
 - `src/services/storage.js` is the only local persistence boundary.
 - `src/chartFactory.js` owns the chart library instance and drawing overlays.
@@ -34,6 +34,12 @@ Binance can reject requests because of rate limits, regional restrictions, or un
 - `lastOpenPosition_<symbol>` stores the local position reference used by close workflow.
 
 Malformed storage entries are ignored and replaced by defaults or empty state.
+
+## Offline historical data
+
+The offline migration uses `scripts/download-futures-history.js`, `scripts/build-history-package.js`, and `scripts/verify-history-package.js`. The resulting package is served from `public/historical-data/` and is read by `DataRepository` in monthly binary chunks. The frontend keeps only active windows in memory; IndexedDB stores recently used chunks and online overlays.
+
+Run the data pipeline with `npm run history:download`, `npm run history:build`, and `npm run history:verify`. The application supports `Local only` and `Online update` modes. It must be served through Vite or another local HTTP server; opening the HTML through `file://` is not supported for worker and module loading.
 
 ## Troubleshooting
 

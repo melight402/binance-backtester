@@ -9,7 +9,8 @@ import { TimeframeSeries } from './dataManager.js';
 import { aggregateCandles, mergeContextCandles } from './aggregation.js';
 import { loadDrawings, saveDrawings } from './drawingStorage.js';
 import { INTERVAL_SECONDS } from './config.js';
-import { DrawingAdapter } from '../chart/drawingAdapter.js';
+import { dataRepository } from './dataRepository.js';
+import { OFFLINE_MODES } from './offlineConfig.js';
 
 const DEFAULT_START_OFFSET_SECONDS = 30 * 24 * 60 * 60;
 
@@ -39,29 +40,17 @@ export class BacktestEngine {
     this.initialized = false;
     this.mode = null;
     this.drawings = [];
-    this.drawingAdapter = new DrawingAdapter();
-    this.unsubscribeDrawings = null;
-    this.bindDrawingSubscription();
     this.dataStatus = 'idle';
     this.dataError = null;
     this.contextChartsEnabled = true;
+    this.dataMode = OFFLINE_MODES.LOCAL;
   }
 
   init({ symbol = this.symbol, interval = this.interval, startTime = null } = {}) {
     return this.initialize({ symbol, interval, startTime });
   }
 
-  bindDrawingSubscription() {
-    if (this.unsubscribeDrawings) return;
-    this.unsubscribeDrawings = this.drawingAdapter.subscribe((nextDrawings) => {
-      this.drawings = nextDrawings;
-      saveDrawings(this.symbol, this.drawings);
-      if (this.initialized) this.emit();
-    });
-  }
-
   async initialize({ symbol = this.symbol, interval = this.interval, startTime = null } = {}) {
-    this.bindDrawingSubscription();
     this.pauseSimulation(false);
     const token = ++this.loadToken;
     this.initialized = false;
@@ -73,7 +62,7 @@ export class BacktestEngine {
     this.interval = nextInterval;
     this.simTime = this.normalizeStartTime(startTime);
     this.series = this.createSeries(symbol, nextInterval);
-    this.drawings = this.drawingAdapter.import(loadDrawings(symbol));
+    this.drawings = loadDrawings(symbol);
     this.initialized = true;
     this.emit();
     await this.loadVisibleData(token);
@@ -115,6 +104,7 @@ export class BacktestEngine {
       drawings: this.drawings,
       dataStatus: this.dataStatus,
       dataError: this.dataError,
+      dataMode: this.dataMode,
       main: visibleMain,
       hourly: mergeContextCandles(
         this.series.hourly?.candles,
@@ -198,6 +188,17 @@ export class BacktestEngine {
     return this.subscribe(listener);
   }
 
+  setDataMode(mode) {
+    dataRepository.setMode(mode);
+    this.dataMode = mode;
+    if (!this.initialized) {
+      this.emit();
+      return;
+    }
+    this.dataStatus = 'loading';
+    this.loadVisibleData(this.loadToken).then(() => this.emit());
+  }
+
   async changeSymbol(symbol) {
     return this.initialize({ symbol, interval: this.interval, startTime: this.simTime });
   }
@@ -216,7 +217,7 @@ export class BacktestEngine {
     const timestampSeconds = Number(timestampMs) / 1000;
     if (!Number.isFinite(timestampSeconds)) return;
     const token = ++this.loadToken;
-    this.series.main?.resetRequests?.();
+    Object.values(this.series).forEach((series) => series.resetWindow?.());
     this.simTime = this.normalizeStartTime(timestampSeconds);
     this.dataStatus = 'loading';
     this.dataError = null;
@@ -299,46 +300,75 @@ export class BacktestEngine {
 
   clearAllPositionsAndLevels() {
     this.mode = null;
-    this.drawingAdapter.removeAll();
+    this.drawings = [];
+    saveDrawings(this.symbol, this.drawings);
+    this.emit();
     return true;
   }
 
   clearDrawingsByType(type) {
-    if (!['position', 'level'].includes(type)) return false;
+    const canonicalType = (() => {
+      const value = typeof type === 'string' ? type.toLowerCase() : '';
+      if (value === 'level' || value === 'hline') return 'hline';
+      if (value === 'horizontalray' || value === 'horizontal_ray' || value === 'horizontal-ray' || value === 'ray') return 'ray';
+      if (value === 'trendline' || value === 'trend-line' || value === 'trend_line') return 'trendline';
+      return value;
+    })();
+
+    if (!['position', 'hline', 'trendline'].includes(canonicalType)) return false;
     this.mode = null;
-    const removed = type === 'level'
-      ? this.drawingAdapter.removeByTypes(['level', 'horizontalRay', 'trendLine'])
-      : this.drawingAdapter.removeByType(type);
-    if (!removed) this.emit();
-    return removed;
+    const typeSet = canonicalType === 'hline'
+      ? new Set(['hline', 'ray', 'trendline'])
+      : canonicalType === 'trendline'
+        ? new Set(['trendline'])
+        : new Set([canonicalType]);
+    const before = this.drawings.length;
+    this.drawings = this.drawings.filter((drawing) => !typeSet.has(drawing.type));
+    const changed = before !== this.drawings.length;
+    if (changed) {
+      saveDrawings(this.symbol, this.drawings);
+      this.emit();
+    }
+    return changed;
   }
 
   addDrawing(drawing) {
     if (!drawing || !drawing.type) return;
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const added = this.drawingAdapter.add({ ...drawing, id });
-    if (!added) return;
+    const normalized = { ...drawing, id };
+    this.drawings = [...this.drawings, normalized];
+    saveDrawings(this.symbol, this.drawings);
+    this.emit();
     return id;
   }
 
   updateDrawing(drawingId, options) {
-    if (!drawingId) return false;
-    return this.drawingAdapter.updateOptions(drawingId, options);
+    if (!drawingId || !options) return false;
+    const idx = this.drawings.findIndex((drawing) => drawing.id === drawingId);
+    if (idx < 0) return false;
+    this.drawings[idx] = { ...this.drawings[idx], ...options };
+    this.drawings = [...this.drawings];
+    saveDrawings(this.symbol, this.drawings);
+    this.emit();
+    return true;
   }
 
   removeDrawing(drawingId) {
     if (!drawingId) return false;
-    if (!this.drawingAdapter.remove(drawingId)) return false;
-    return true;
+    const before = this.drawings.length;
+    this.drawings = this.drawings.filter((drawing) => drawing.id !== drawingId);
+    const changed = before !== this.drawings.length;
+    if (changed) {
+      saveDrawings(this.symbol, this.drawings);
+      this.emit();
+    }
+    return changed;
   }
 
   dispose() {
     this.pauseSimulation();
     this.loadToken += 1;
     Object.values(this.series).forEach((series) => series.dispose?.());
-    this.unsubscribeDrawings?.();
-    this.unsubscribeDrawings = null;
-    this.drawingAdapter.dispose();
     this.listeners.clear();
     this.series = {};
     this.initialized = false;

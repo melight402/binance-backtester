@@ -4,6 +4,8 @@
 /node_modules/
 /.idea/
 /dist/
+/public/historical-data/
+/.history-source/
 .qodoj
 /dist/
 /node_modules/

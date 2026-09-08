@@ -30,15 +30,24 @@ import {
   setDailyCandles,
   dataStatus,
   dataError,
+  dataMode,
   setDataStatus,
   setDataError,
+  setDataMode,
   simulationSpeed,
   setSimulationSpeed,
+  activeTool,
   setActiveTool,
   setDrawings,
   drawings,
   selectedDrawingId,
   setSelectedDrawingId,
+  selectedId,
+  setSelectedId,
+  drawingActiveTool,
+  setDrawingActiveTool,
+  syncDrawingState,
+  setDrawingSymbol,
   tvxValue,
   setTvxValue,
   maSettings,
@@ -71,6 +80,7 @@ export function App() {
       startTime: selectedStartTime(),
       ...positionSettings(),
       profitLoss: profitLoss(),
+      dataMode: dataMode(),
     });
     dataManager.setContextChartsEnabled(showSubCharts());
   });
@@ -78,6 +88,20 @@ export function App() {
   createEffect(() => {
     if (!appSettingsHydrated()) return;
     saveTvxValue(tvxValue());
+  });
+
+  createEffect(() => {
+    const tool = activeTool();
+    if (tool !== drawingActiveTool()) {
+      setDrawingActiveTool(tool ?? 'cursor');
+    }
+  });
+
+  createEffect(() => {
+    const currentSelection = selectedDrawingId();
+    if (selectedId() !== currentSelection) {
+      setSelectedId(currentSelection ?? null);
+    }
   });
 
   // Store is the single reactive bridge between the engine and Solid components.
@@ -92,6 +116,8 @@ export function App() {
     setSelectedStartTime(savedAppSettings.startTime);
     setPositionSettings({ rr: savedAppSettings.rr, riskUsdt: savedAppSettings.riskUsdt });
     setProfitLoss(savedAppSettings.profitLoss);
+    setDataMode(savedAppSettings.dataMode);
+    dataManager.setDataMode(savedAppSettings.dataMode);
     setTvxValue(loadTvxValue());
     setAppSettingsHydrated(true);
     setMaSettings(loadIndicatorSettings());
@@ -103,12 +129,15 @@ export function App() {
       setSimulationSpeed(state.speed);
       setSelectedStartTime(state.simTime);
       setActiveTool(state.mode);
+      setDrawingSymbol(state.symbol);
+      syncDrawingState(state.symbol, state.drawings, selectedDrawingId());
       setDrawings(state.drawings);
       setMainCandles(state.main);
       setHourlyCandles(state.hourly);
       setDailyCandles(state.daily);
       setDataStatus(state.dataStatus);
       setDataError(state.dataError);
+      setDataMode(state.dataMode || 'local');
       if (!state.drawings.some((drawing) => drawing.id === selectedDrawingId())) {
         setSelectedDrawingId(null);
       }
