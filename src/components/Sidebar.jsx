@@ -2,13 +2,14 @@
 import { createSignal, createEffect, onCleanup, For } from 'solid-js';
 import { currentPair, dataMode, setCurrentPair } from '../services/store.js';
 import { dataManager } from '../backtester/dataManager.js';
-import { loadOfflineSymbols } from '../backtester/offlineMetadata.js';
+import { loadOfflineSymbols, loadOfflineStartTimes } from '../backtester/offlineMetadata.js';
 import { binanceApi } from '../backtester/binanceApi.js';
 import { loadFavorites, saveFavorites } from '../backtester/favoritesStorage.js';
 
 export function Sidebar() {
   const [allPairs, setAllPairs] = createSignal([]);       // Все доступные торговые пары
   const [favorites, setFavorites] = createSignal(loadFavorites());
+  const [offlineStartTimes, setOfflineStartTimes] = createSignal({});
   const [searchQuery, setSearchQuery] = createSignal(''); // Строка поиска
   const [loadError, setLoadError] = createSignal(null);
   let loadController;
@@ -24,8 +25,10 @@ export function Sidebar() {
     const loadPairs = async () => {
       try {
         const localPairs = await loadOfflineSymbols();
+        const localStartTimes = await loadOfflineStartTimes();
         if (generation !== loadGeneration || loadController.signal.aborted) return;
         const normalizedLocal = Array.isArray(localPairs) ? localPairs : Object.keys(localPairs || {});
+        setOfflineStartTimes(localStartTimes);
         setAllPairs(normalizedLocal);
 
         if (mode !== 'online') return;
@@ -88,6 +91,13 @@ export function Sidebar() {
     return favorites().filter(pair => pair.includes(query)).sort();
   };
 
+  const formatOfflineStartDate = (symbol) => {
+    const timestamp = offlineStartTimes()[symbol];
+    if (!Number.isFinite(timestamp)) return '';
+    const date = new Date(timestamp * 1000);
+    return `${String(date.getUTCMonth() + 1).padStart(2, '0')}.${String(date.getUTCFullYear()).slice(-2)}`;
+  };
+
   return (
     <div class="flex-col" style={{ height: '100%', width: '100%' }}>
       {/* Поле поиска */}
@@ -128,7 +138,10 @@ export function Sidebar() {
                     "border-bottom": '1px solid #222634'
                   }}
                 >
-                  <span style={{ "font-weight": '500', color: currentPair() === symbol ? '#fff' : '#d1d4dc' }}>{symbol}</span>
+                  <span style={{ "font-weight": '500', color: currentPair() === symbol ? '#fff' : '#d1d4dc' }}>
+                    {symbol}
+                    {formatOfflineStartDate(symbol) && <span style={{ "margin-left": '6px', color: '#848e9c', "font-size": '11px' }}>{formatOfflineStartDate(symbol)}</span>}
+                  </span>
                   <span onClick={(e) => toggleFavorite(symbol, e)} style={{ cursor: 'pointer', color: '#f0b90b' }}>★</span>
                 </div>
               )}
@@ -152,7 +165,10 @@ export function Sidebar() {
                 "border-bottom": '1px solid #222634'
               }}
             >
-              <span style={{ "font-weight": '500', color: currentPair() === symbol ? '#fff' : '#d1d4dc' }}>{symbol}</span>
+              <span style={{ "font-weight": '500', color: currentPair() === symbol ? '#fff' : '#d1d4dc' }}>
+                {symbol}
+                {formatOfflineStartDate(symbol) && <span style={{ "margin-left": '6px', color: '#848e9c', "font-size": '11px' }}>{formatOfflineStartDate(symbol)}</span>}
+              </span>
               <span onClick={(e) => toggleFavorite(symbol, e)} style={{ cursor: 'pointer', color: '#474d57' }}>☆</span>
             </div>
           )}

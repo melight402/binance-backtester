@@ -2,6 +2,7 @@ import { OFFLINE_PACKAGE_URL, OFFLINE_SYMBOLS } from './offlineConfig.js';
 
 let symbolsPromise;
 let precisionPromise;
+let manifestPromise;
 
 async function readMetadata(name, fallback) {
   try {
@@ -18,6 +19,23 @@ export function loadOfflineSymbols() {
   return symbolsPromise;
 }
 
+export function loadOfflineStartTimes() {
+  manifestPromise ||= fetch(`${OFFLINE_PACKAGE_URL}/manifest.json`)
+    .then(async response => {
+      if (!response.ok) throw new Error(`Manifest HTTP ${response.status}`);
+      return response.json();
+    })
+    .catch(() => ({ symbols: {} }));
+  return manifestPromise.then(manifest => Object.fromEntries(
+    Object.entries(manifest.symbols || {}).map(([symbol, intervals]) => {
+      const firstTimes = Object.values(intervals || {})
+        .map(interval => Number(interval?.firstTime))
+        .filter(Number.isFinite);
+      return [symbol, firstTimes.length > 0 ? Math.min(...firstTimes) : null];
+    }),
+  ));
+}
+
 export function loadOfflinePrecision() {
   precisionPromise ||= readMetadata('precision.json', {});
   return precisionPromise;
@@ -26,4 +44,5 @@ export function loadOfflinePrecision() {
 export function clearOfflineMetadataCache() {
   symbolsPromise = null;
   precisionPromise = null;
+  manifestPromise = null;
 }

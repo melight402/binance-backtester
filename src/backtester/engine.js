@@ -312,15 +312,18 @@ export class BacktestEngine {
       if (value === 'level' || value === 'hline') return 'hline';
       if (value === 'horizontalray' || value === 'horizontal_ray' || value === 'horizontal-ray' || value === 'ray') return 'ray';
       if (value === 'trendline' || value === 'trend-line' || value === 'trend_line') return 'trendline';
+      if (value === 'range' || value === 'dateandpricerange' || value === 'date-and-price-range') return 'range';
       return value;
     })();
 
-    if (!['position', 'hline', 'trendline'].includes(canonicalType)) return false;
+    if (!['position', 'hline', 'trendline', 'range'].includes(canonicalType)) return false;
     this.mode = null;
     const typeSet = canonicalType === 'hline'
-      ? new Set(['hline', 'ray', 'trendline'])
+      ? new Set(['hline', 'ray', 'trendline', 'range'])
       : canonicalType === 'trendline'
         ? new Set(['trendline'])
+        : canonicalType === 'range'
+          ? new Set(['range'])
         : new Set([canonicalType]);
     const before = this.drawings.length;
     this.drawings = this.drawings.filter((drawing) => !typeSet.has(drawing.type));

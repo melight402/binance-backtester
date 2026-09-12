@@ -69,6 +69,30 @@ export function hitTestDrawing(pointer, drawings, geometry) {
       }
     }
 
+    if (drawing.type === 'range') {
+      const p1 = drawing.p1 || {};
+      const p2 = drawing.p2 || {};
+      const x1 = geometry.toX?.(p1.time);
+      const y1 = geometry.toY?.(p1.price);
+      const x2 = geometry.toX?.(p2.time);
+      const y2 = geometry.toY?.(p2.price);
+      if (x1 == null || y1 == null || x2 == null || y2 == null) continue;
+      if (dist(pointer.x, pointer.y, x1, y1) <= 8) return { id: drawing.id, mode: 'range-p1' };
+      if (dist(pointer.x, pointer.y, x2, y2) <= 8) return { id: drawing.id, mode: 'range-p2' };
+      const left = Math.min(x1, x2);
+      const right = Math.max(x1, x2);
+      const top = Math.min(y1, y2);
+      const bottom = Math.max(y1, y2);
+      if (pointer.x >= left && pointer.x <= right && pointer.y >= top && pointer.y <= bottom) {
+        return {
+          id: drawing.id,
+          mode: 'range-body',
+          anchorTime: geometry.fromX ? geometry.fromX(pointer.x) : pointer.x,
+          anchorPrice: geometry.fromY ? geometry.fromY(pointer.y) : pointer.y,
+        };
+      }
+    }
+
     if (drawing.type === 'long' || drawing.type === 'short') {
       const entryX = geometry.toX?.(drawing.entryTime);
       const entryY = geometry.toY?.(drawing.entry);

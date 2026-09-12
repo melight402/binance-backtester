@@ -2,6 +2,7 @@ const COLORS = {
   hline: '#5b7fd6',
   ray: '#c98bf0',
   trend: '#f5b45a',
+  range: '#26a69a',
   accent: '#4c8cff',
   long: '#2fd6a7',
   short: '#ff5d72',
@@ -24,7 +25,7 @@ export function label(ctx, x, y, text, color, align = 'left') {
   ctx.font = "600 11px 'JetBrains Mono', monospace";
   const paddingX = 6;
   const textWidth = ctx.measureText(text).width;
-  const boxX = align === 'left' ? x : x - textWidth - paddingX * 2;
+  const boxX = align === 'left' ? x : align === 'center' ? x - (textWidth + paddingX * 2) / 2 : x - textWidth - paddingX * 2;
   ctx.fillStyle = color;
   roundRect(ctx, boxX, y - 9, textWidth + paddingX * 2, 18, 4);
   ctx.fill();
@@ -158,6 +159,47 @@ export function drawTrend(ctx, drawing, selectedId) {
   }
 }
 
+export function drawRange(ctx, drawing, selectedId, formatPrice) {
+  const p1 = drawing?.p1 ?? {};
+  const p2 = drawing?.p2 ?? {};
+  const x1 = drawing.geo?.toX?.(p1.time);
+  const y1 = drawing.geo?.toY?.(p1.price);
+  const x2 = drawing.geo?.toX?.(p2.time);
+  const y2 = drawing.geo?.toY?.(p2.price);
+  if ([x1, y1, x2, y2].some((value) => value == null)) return;
+  const isSelected = drawing.id === selectedId;
+  const left = Math.min(x1, x2);
+  const top = Math.min(y1, y2);
+  const width = Math.max(1, Math.abs(x2 - x1));
+  const height = Math.max(1, Math.abs(y2 - y1));
+  const priceDelta = p2.price - p1.price;
+  const percent = p1.price ? (priceDelta / p1.price) * 100 : 0;
+  const durationMinutes = Math.abs(p2.time - p1.time) / 60;
+  const duration = durationMinutes >= 1440
+    ? `${(durationMinutes / 1440).toFixed(1)}d`
+    : durationMinutes >= 60
+      ? `${(durationMinutes / 60).toFixed(1)}h`
+      : `${Math.round(durationMinutes)}m`;
+  const text = `${priceDelta >= 0 ? '+' : ''}${formatPrice(priceDelta)} (${percent.toFixed(2)}%) · ${duration}`;
+
+  ctx.fillStyle = isSelected ? 'rgba(38, 166, 154, 0.22)' : 'rgba(38, 166, 154, 0.12)';
+  ctx.fillRect(left, top, width, height);
+  ctx.strokeStyle = isSelected ? COLORS.accent : COLORS.range;
+  ctx.lineWidth = isSelected ? 2 : 1.25;
+  ctx.setLineDash([5, 4]);
+  ctx.strokeRect(left, top, width, height);
+  ctx.setLineDash([]);
+  if (isSelected) {
+    ctx.fillStyle = COLORS.accent;
+    for (const [px, py] of [[x1, y1], [x2, y2]]) {
+      ctx.beginPath();
+      ctx.arc(px, py, 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  label(ctx, left + width / 2, top - 10, text, isSelected ? COLORS.accent : COLORS.range, 'center');
+}
+
 export function drawPosition(ctx, drawing, width, selectedId, formatPrice, rrRatio, positionSizeUSDT, riskUsdt) {
   const entryTime = drawing?.entryTime;
   const endTime = drawing?.endTime ?? width;
@@ -224,6 +266,7 @@ export function redrawCanvas({ ctx, width, height, drawings, selectedId, draft, 
     if (drawing.type === 'hline') drawHLine(ctx, { ...drawing, geo: geometry }, width, selectedId, formatPrice);
     else if (drawing.type === 'ray') drawRay(ctx, { ...drawing, geo: geometry }, width, selectedId, formatPrice);
     else if (drawing.type === 'trendline') drawTrend(ctx, { ...drawing, geo: geometry }, selectedId);
+    else if (drawing.type === 'range') drawRange(ctx, { ...drawing, geo: geometry }, selectedId, formatPrice);
     else if (drawing.type === 'long' || drawing.type === 'short') {
       drawPosition(ctx, { ...drawing, geo: geometry }, width, selectedId, formatPrice, rrRatio, positionSizeUSDT, riskUsdt);
     }

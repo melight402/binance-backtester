@@ -125,9 +125,11 @@ export function createChart(container, options) {
     let selectedDrawingId = null;
     let dragState = null;
     let draftTrendLine = null;
+    let draftRange = null;
     const levels = [];
     const horizontalRays = [];
     const trendLines = [];
+    const ranges = [];
     const positions = [];
     let renderedDrawingsKey = '';
     const overlay = document.createElement('div');
@@ -257,6 +259,8 @@ export function createChart(container, options) {
             ...horizontalRays.map((ray) => ({ id: ray.id, type: 'ray', time: ray.startTime, price: ray.price })),
             ...trendLines.map((line) => ({ id: line.id, type: 'trendline', p1: line.p1, p2: line.p2 })),
             ...(draftTrendLine ? [{ id: draftTrendLine.id, type: 'trendline', p1: draftTrendLine.p1, p2: draftTrendLine.p2 }] : []),
+            ...ranges.map((range) => ({ id: range.id, type: 'range', p1: range.p1, p2: range.p2 })),
+            ...(draftRange ? [{ id: draftRange.id, type: 'range', p1: draftRange.p1, p2: draftRange.p2 }] : []),
         ];
         redrawCanvas({
             ctx: drawingCtx,
@@ -335,7 +339,9 @@ export function createChart(container, options) {
         levels.length = 0;
         horizontalRays.length = 0;
         trendLines.length = 0;
+        ranges.length = 0;
         draftTrendLine = null;
+        draftRange = null;
         positions.forEach((position) => {
             position.lines.forEach((line) => candlestickSeries.removePriceLine(line));
             position.elements.forEach((element) => element.remove());
@@ -379,6 +385,12 @@ export function createChart(container, options) {
 
     const addTrendLine = (p1, p2, drawingId = null) => {
         trendLines.push({ id: drawingId, p1: { ...p1 }, p2: { ...p2 } });
+        applySelectionStyles();
+        redrawCanvasLayer();
+    };
+
+    const addRange = (p1, p2, drawingId = null) => {
+        ranges.push({ id: drawingId, p1: { ...p1 }, p2: { ...p2 } });
         applySelectionStyles();
         redrawCanvasLayer();
     };
@@ -486,6 +498,9 @@ export function createChart(container, options) {
         if (type === 'trendline') {
             addTrendLine(drawing.p1 ?? { time: drawing.time, price: drawing.price }, drawing.p2 ?? { time: drawing.time, price: drawing.price }, drawing.id);
         }
+        if (type === 'range') {
+            addRange(drawing.p1, drawing.p2, drawing.id);
+        }
         if (type === 'position') {
             addPosition(drawing.side, drawing.entryPrice, drawing.entryTime, drawing.stopPrice, drawing.targetPrice, drawing.id);
         }
@@ -531,6 +546,7 @@ export function createChart(container, options) {
             ...levels.map((level) => ({ ...level, type: 'hline', price: level.price })),
             ...horizontalRays.map((ray) => ({ ...ray, type: 'ray', price: ray.price, time: ray.startTime })),
             ...trendLines.map((line) => ({ ...line, type: 'trendline' })),
+            ...ranges.map((range) => ({ ...range, type: 'range' })),
             ...positions.map((position) => ({
                 ...position,
                 type: position.side,
@@ -571,6 +587,14 @@ export function createChart(container, options) {
 
         if (target.type === 'trendline') {
             const match = trendLines.find((line) => line.id === id);
+            if (match) {
+                if ('p1' in next) match.p1 = next.p1;
+                if ('p2' in next) match.p2 = next.p2;
+            }
+        }
+
+        if (target.type === 'range') {
+            const match = ranges.find((range) => range.id === id);
             if (match) {
                 if ('p1' in next) match.p1 = next.p1;
                 if ('p2' in next) match.p2 = next.p2;
@@ -618,6 +642,7 @@ export function createChart(container, options) {
                 ...levels.map((level) => ({ id: level.id, type: 'hline', price: level.price })),
                 ...horizontalRays.map((ray) => ({ id: ray.id, type: 'ray', time: ray.startTime, price: ray.price })),
                 ...trendLines.map((line) => ({ id: line.id, type: 'trendline', p1: line.p1, p2: line.p2 })),
+                ...ranges.map((range) => ({ id: range.id, type: 'range', p1: range.p1, p2: range.p2 })),
                 ...positions.map((position) => ({ id: position.id, type: position.side, entry: position.entryPrice, stop: position.stopPrice, pt: position.targetPrice, entryTime: position.entryTime })),
             ], geometry);
             if (hit?.id) {
@@ -659,6 +684,31 @@ export function createChart(container, options) {
             options.onDrawingCreated?.({
                 ...finalized,
                 type: 'trendline',
+                sourceChartId: options.type,
+            });
+            activeTool = null;
+            container.style.cursor = '';
+            options.onToolUsed?.();
+            return;
+        }
+
+        if (normalizedTool === 'range') {
+            const time = param.time ?? candlesData[candlesData.length - 1]?.time;
+            if (!draftRange) {
+                draftRange = {
+                    id: `draft-${Date.now()}`,
+                    type: 'range',
+                    p1: { time, price },
+                    p2: { time, price },
+                };
+                redrawCanvasLayer();
+                return;
+            }
+            const finalized = { ...draftRange, p2: { time, price } };
+            draftRange = null;
+            options.onDrawingCreated?.({
+                ...finalized,
+                type: 'range',
                 sourceChartId: options.type,
             });
             activeTool = null;
@@ -721,6 +771,7 @@ export function createChart(container, options) {
             ...levels.map((level) => ({ id: level.id, type: 'hline', price: level.price })),
             ...horizontalRays.map((ray) => ({ id: ray.id, type: 'ray', time: ray.startTime, price: ray.price })),
             ...trendLines.map((line) => ({ id: line.id, type: 'trendline', p1: line.p1, p2: line.p2 })),
+            ...ranges.map((range) => ({ id: range.id, type: 'range', p1: range.p1, p2: range.p2 })),
             ...positions.map((position) => ({ id: position.id, type: position.side, entry: position.entryPrice, stop: position.stopPrice, pt: position.targetPrice, entryTime: position.entryTime })),
         ], {
             width: container.clientWidth,
@@ -754,6 +805,16 @@ export function createChart(container, options) {
             }
             return;
         }
+        if (activeTool === 'range' && draftRange) {
+            const point = getPointerPoint(event);
+            const time = normalizeChartTime(chart.timeScale().coordinateToTime(point.x));
+            const price = candlestickSeries.coordinateToPrice(point.y);
+            if (Number.isFinite(time) && Number.isFinite(price)) {
+                draftRange.p2 = { time, price };
+                redrawCanvasLayer();
+            }
+            return;
+        }
         if (!dragState || activeTool) return;
         const point = getPointerPoint(event);
         event.preventDefault();
@@ -772,6 +833,7 @@ export function createChart(container, options) {
         if (event.key === 'Escape') {
             dragState = null;
             draftTrendLine = null;
+            draftRange = null;
             selectedDrawingId = null;
             activeTool = null;
             container.style.cursor = '';
@@ -790,6 +852,7 @@ export function createChart(container, options) {
             removeMatch(levels);
             removeMatch(horizontalRays);
             removeMatch(trendLines);
+            removeMatch(ranges);
             removeMatch(positions);
             selectedDrawingId = null;
             applySelectionStyles();
@@ -868,6 +931,9 @@ export function createChart(container, options) {
             activeTool = normalizeTool(mode);
             if (activeTool !== 'trendline') {
                 draftTrendLine = null;
+            }
+            if (activeTool !== 'range') {
+                draftRange = null;
             }
             container.style.cursor = activeTool ? 'crosshair' : '';
         },

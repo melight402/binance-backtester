@@ -78,6 +78,27 @@ export function applyDragUpdate(drawing, mode, pointer, geometry, anchor = {}) {
     };
   }
 
+  if (mode === 'range-p1' || mode === 'range-p2') {
+    const nextPrice = geometry.fromY ? geometry.fromY(pointer.y) : pointer.y;
+    const nextTime = geometry.fromX ? geometry.fromX(pointer.x) : pointer.x;
+    const point = mode === 'range-p1' ? 'p1' : 'p2';
+    return { ...next, [point]: { ...next[point], time: nextTime, price: nextPrice } };
+  }
+
+  if (mode === 'range-body') {
+    const nextPrice = geometry.fromY ? geometry.fromY(pointer.y) : pointer.y;
+    const nextTime = geometry.fromX ? geometry.fromX(pointer.x) : pointer.x;
+    const anchorTime = Number.isFinite(anchor.anchorTime) ? anchor.anchorTime : original.p1?.time;
+    const anchorPrice = Number.isFinite(anchor.anchorPrice) ? anchor.anchorPrice : original.p1?.price;
+    const dt = Number.isFinite(nextTime) && Number.isFinite(anchorTime) ? nextTime - anchorTime : 0;
+    const dp = Number.isFinite(nextPrice) && Number.isFinite(anchorPrice) ? nextPrice - anchorPrice : 0;
+    return {
+      ...next,
+      p1: { ...next.p1, time: original.p1.time + dt, price: original.p1.price + dp },
+      p2: { ...next.p2, time: original.p2.time + dt, price: original.p2.price + dp },
+    };
+  }
+
   if (mode === 'position-body') {
     const nextPrice = geometry.fromY ? geometry.fromY(pointer.y) : pointer.y;
     const nextTime = geometry.fromX ? geometry.fromX(pointer.x) : pointer.x;

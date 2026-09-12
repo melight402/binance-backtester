@@ -8,6 +8,7 @@ function normalizeType(type) {
   if (lower === 'level' || lower === 'hline') return 'hline';
   if (lower === 'horizontalray' || lower === 'horizontal_ray' || lower === 'horizontal-ray' || lower === 'ray') return 'ray';
   if (lower === 'trendline' || lower === 'trend-line' || lower === 'trend_line') return 'trendline';
+  if (lower === 'range' || lower === 'dateandpricerange' || lower === 'date-and-price-range') return 'range';
   return lower;
 }
 
@@ -33,6 +34,15 @@ function normalizeDrawing(value) {
     const p2Price = Number(p2.price);
     if (Number.isFinite(p1Time) && Number.isFinite(p1Price) && Number.isFinite(p2Time) && Number.isFinite(p2Price)) {
       return { ...value, type: 'trendline', p1: { time: p1Time, price: p1Price }, p2: { time: p2Time, price: p2Price }, sourceChartId: value.sourceChartId || null };
+    }
+    return null;
+  }
+  if (type === 'range') {
+    const p1 = value.p1 || {};
+    const p2 = value.p2 || {};
+    const points = [p1, p2].map((point) => ({ time: Number(point.time), price: Number(point.price) }));
+    if (points.every((point) => Number.isFinite(point.time) && Number.isFinite(point.price))) {
+      return { ...value, type: 'range', p1: points[0], p2: points[1], sourceChartId: value.sourceChartId || null };
     }
     return null;
   }

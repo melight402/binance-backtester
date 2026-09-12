@@ -72,6 +72,7 @@ export function Header() {
         h: 'hline',
         j: 'ray',
         k: 'trendline',
+        r: 'range',
         c: null,
       };
 
@@ -396,6 +397,15 @@ export function Header() {
           style={{ "background-color": activeTool() === 'trendline' ? '#ffb300' : '#2a2e39' }}
         >
           📈
+        </button>
+        <button 
+          onClick={() => toggleTool('range')} 
+          class={activeTool() === 'range' ? 'active' : ''}
+          aria-label="Date and price range"
+          title="Date and price range"
+          style={{ "background-color": activeTool() === 'range' ? '#26a69a' : '#2a2e39' }}
+        >
+          📐
         </button>
         <button 
           onClick={handleDeleteSelected}
