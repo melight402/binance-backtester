@@ -1,3 +1,15 @@
+:root {
+  --strategy-menu-bg: #1f2937;
+}
+
+.strategy-select { position: relative; width: 220px; }
+.strategy-select-button { width: 100%; height: 30px; display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 6px 8px; appearance: none; background: #131722 !important; border: 1px solid #39485f; border-radius: 4px; color: #e7edf5 !important; text-align: left; font-size: 12px; }
+.strategy-select-button:hover { background: #1c2030 !important; border-color: #6b7f99; }
+.strategy-select-button span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.strategy-select-arrow { font-size: 9px; }
+.strategy-select-menu { z-index: 99999; overflow-y: auto; padding: 4px; background: #1f2937; opacity: 1; border: 1px solid #6b7f99; border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.7); }
+.strategy-select-option { width: 100%; display: block; padding: 7px 8px; border: 0; border-radius: 4px; background: transparent !important; color: #fff !important; text-align: left; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.strategy-select-option:hover, .strategy-select-option.selected { background: rgba(255,255,255,.12); }
 /* src/index.css */
 
 /* Обеспечиваем, чтобы корневой контейнер SolidJS занимал 100% экрана */

@@ -70,7 +70,7 @@ export function syncDrawingState(symbolKey, nextDrawings = [], nextSelectedId = 
   setSelectedId(nextSelectedId ?? null);
 }
 
-export const [tvxValue, setTvxValue] = createSignal('level_breakout');
+export const [tvxValue, setTvxValue] = createSignal('');
 export const [maSettings, setMaSettings] = createSignal({
 	hma50: { visible: true, period: 50 },
 	hma200: { visible: true, period: 200 },

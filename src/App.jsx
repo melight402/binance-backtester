@@ -118,7 +118,8 @@ export function App() {
     setProfitLoss(savedAppSettings.profitLoss);
     setDataMode(savedAppSettings.dataMode);
     dataManager.setDataMode(savedAppSettings.dataMode);
-    setTvxValue(loadTvxValue());
+    const savedTvxValue = loadTvxValue();
+    if (savedTvxValue) setTvxValue(savedTvxValue);
     setAppSettingsHydrated(true);
     setMaSettings(loadIndicatorSettings());
     setIndicatorSettingsHydrated(true);

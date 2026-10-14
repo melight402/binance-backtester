@@ -1,7 +1,6 @@
 // src/components/Header.jsx
 import { createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import { isPlaying, setIsPlaying, timeframe, setTimeframe, currentPair, showSidebar, setShowSidebar, showSubCharts, setShowSubCharts, simulationSpeed, setSimulationSpeed, activeTool, setActiveTool, maSettings, setMaSettings, selectedStartTime, setSelectedStartTime, positionSettings, setPositionSettings, profitLoss, setProfitLoss, drawings, selectedDrawingId, setSelectedDrawingId, tvxValue, setTvxValue, dataMode, setDataMode } from '../services/store.js';
-import { TVX_OPTIONS } from '../constants/tvxOptions.js';
 import { INTERVAL_SECONDS, TOP_TIMEFRAME_OPTIONS } from '../backtester/config.js';
 import { dataManager } from '../backtester/dataManager.js';
 import { calculatePositionNotional, calculatePositionQuantity, normalizePositionPrices, resolvePositionToolPrices } from '../backtester/positionCalculations.js';
@@ -10,6 +9,8 @@ import { roundToTick } from '../backtester/risk.js';
 import { captureScreenshot } from '../services/screenshot.js';
 import { closeHistoryPosition, openHistoryPosition } from '../services/positionApi.js';
 import { readJson, removeStorage, writeJson } from '../services/storage.js';
+import { fetchTvxOptions } from '../backtester/tvxStorage.js';
+import { StrategySelect } from './StrategySelect.jsx';
 import { HeaderDropdown } from './HeaderDropdown.jsx';
 
 export function Header() {
@@ -18,6 +19,7 @@ export function Header() {
   const [isOpeningPosition, setIsOpeningPosition] = createSignal(false);
   const [isClosingPosition, setIsClosingPosition] = createSignal(false);
   const [tradeNote, setTradeNote] = createSignal('');
+  const [tvxOptions, setTvxOptions] = createSignal([]);
   let workflowController = null;
 
   const cancelWorkflow = () => {
@@ -49,6 +51,7 @@ export function Header() {
   onCleanup(cancelWorkflow);
 
   onMount(() => {
+    fetchTvxOptions().then(setTvxOptions).catch(() => setTvxOptions([]));
     const handleSpaceKey = (event) => {
       if (event.code !== 'Space' || event.repeat) return;
       const target = event.target;
@@ -434,16 +437,7 @@ export function Header() {
 
       <div class="flex-row align-center" style={{ gap: '6px' }}>
         <label for="tvx-strategy" style={{ "font-size": "12px", color: '#848e9c' }}>Стратегия</label>
-        <select
-          id="tvx-strategy"
-          value={tvxValue()}
-          onChange={(e) => setTvxValue(e.currentTarget.value)}
-          style={{ "max-width": "220px", "font-size": "12px" }}
-        >
-          {TVX_OPTIONS.map((option) => (
-            <option value={option.value}>{option.label}</option>
-          ))}
-        </select>
+        <StrategySelect options={tvxOptions()} value={tvxValue()} onChange={(value) => setTvxValue(value)} />
       </div>
 
       <div class="flex-row align-center" style={{ gap: '6px' }}>
