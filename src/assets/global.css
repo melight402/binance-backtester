@@ -189,6 +189,7 @@ body {
 .position-zone {
   position: absolute;
   display: none;
+  pointer-events: none;
 }
 
 .position-zone-risk {
@@ -202,6 +203,7 @@ body {
 .position-label {
   position: absolute;
   display: none;
+  pointer-events: none;
   max-width: calc(100% - 12px);
   overflow: hidden;
   color: #e6edf5;

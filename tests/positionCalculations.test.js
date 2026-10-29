@@ -5,7 +5,7 @@ import {
   resolvePositionToolPrices,
 } from '../src/backtester/positionCalculations.js';
 import { loadDrawings } from '../src/backtester/drawingStorage.js';
-import { createDrawingFromTool, hitTestDrawing } from '../src/services/drawingInteraction.js';
+import { createDrawingFromTool, createDrawingPatch, hitTestDrawing } from '../src/services/drawingInteraction.js';
 import { applyDragUpdate } from '../src/services/drawingDrag.js';
 
 beforeEach(() => {
@@ -157,6 +157,77 @@ describe('drawingInteraction', () => {
     expect(hitTestDrawing({ x: 400, y: 7 }, position, geometry)).toEqual({ id: 'p-1', mode: 'position-stop' });
   });
 
+  it('lets a ray move independently over a position area', () => {
+    const drawings = [
+      { id: 'r-1', type: 'ray', time: 10, price: 50 },
+      { id: 'p-1', type: 'long', entryTime: 10, endTime: 40, entry: 50, stop: 49, pt: 70 },
+    ];
+
+    expect(hitTestDrawing({ x: 200, y: 0 }, drawings, geometry)).toEqual({
+      id: 'r-1',
+      mode: 'ray-body',
+      anchorTime: 20,
+      anchorPrice: 50,
+    });
+    expect(hitTestDrawing({ x: 200, y: -20 }, drawings, geometry)).toEqual({
+      id: 'p-1',
+      mode: 'position-body',
+      anchorTime: 20,
+      anchorPrice: 70,
+    });
+    expect(hitTestDrawing({ x: 100, y: 0 }, drawings, geometry)).toEqual({
+      id: 'p-1',
+      mode: 'position-entry',
+    });
+  });
+
+  it('lets a horizontal level move independently over a position area', () => {
+    const drawings = [
+      { id: 'h-1', type: 'hline', price: 60 },
+      { id: 'p-1', type: 'long', entryTime: 10, endTime: 40, entry: 50, stop: 49, pt: 70 },
+    ];
+
+    expect(hitTestDrawing({ x: 200, y: -10 }, drawings, geometry)).toEqual({
+      id: 'h-1',
+      mode: 'hline-price',
+    });
+    expect(hitTestDrawing({ x: 200, y: -20 }, drawings, geometry)).toEqual({
+      id: 'p-1',
+      mode: 'position-body',
+      anchorTime: 20,
+      anchorPrice: 70,
+    });
+  });
+
+  it('continues hit-testing lines when a position has no end time', () => {
+    const strictGeometry = {
+      ...geometry,
+      width: 500,
+      toX: (time) => {
+        if (!Number.isFinite(time)) throw new Error('Chart time must be finite');
+        return time * 10;
+      },
+    };
+    const position = {
+      id: 'p-1',
+      type: 'long',
+      entryTime: 10,
+      entry: 50,
+      stop: 49,
+      pt: 70,
+    };
+
+    expect(hitTestDrawing({ x: 200, y: 0 }, [
+      { id: 'r-1', type: 'ray', time: 10, price: 50 },
+      position,
+    ], strictGeometry)).toMatchObject({ id: 'r-1', mode: 'ray-body' });
+
+    expect(hitTestDrawing({ x: 200, y: -10 }, [
+      { id: 'h-1', type: 'hline', price: 60 },
+      position,
+    ], strictGeometry)).toEqual({ id: 'h-1', mode: 'hline-price' });
+  });
+
   it('updates a dragged hline price and position values using the active drag mode', () => {
     const hline = { id: 'h-1', type: 'hline', price: 50 };
     expect(applyDragUpdate(hline, 'hline-price', { x: 40, y: 20 }, geometry)).toEqual({
@@ -182,6 +253,28 @@ describe('drawingInteraction', () => {
       entry: 50,
       stop: 35,
       pt: 55,
+    });
+
+  });
+
+  it('maps live drawing coordinates to persisted drawing fields', () => {
+    expect(createDrawingPatch('hline', { price: 42 })).toEqual({ price: 42 });
+    expect(createDrawingPatch('ray', { time: 123, price: 42 })).toEqual({
+      price: 42,
+      startTime: 123,
+    });
+    expect(createDrawingPatch('long', {
+      entry: 42,
+      stop: 40,
+      pt: 46,
+      entryTime: 123,
+      endTime: 456,
+    })).toEqual({
+      entryPrice: 42,
+      stopPrice: 40,
+      targetPrice: 46,
+      entryTime: 123,
+      endTime: 456,
     });
   });
 });

@@ -3,7 +3,7 @@ import { buildHmaLineData } from './backtester/indicators.js';
 import { buildSessionSeriesData } from './backtester/sessions.js';
 import { HMA_COLORS, HMA_PERIODS } from './backtester/config.js';
 import { loadChartState, saveChartState } from './backtester/chartStateStorage.js';
-import { createDrawingFromTool, hitTestDrawing } from './services/drawingInteraction.js';
+import { createDrawingFromTool, createDrawingPatch, hitTestDrawing } from './services/drawingInteraction.js';
 import { redrawCanvas } from './services/canvasDrawing.js';
 import { applyDragUpdate } from './services/drawingDrag.js';
 
@@ -160,10 +160,11 @@ export function createChart(container, options) {
     const formatPrice = (price) => price >= 100 ? price.toFixed(2) : price.toFixed(4);
 
     const timeToDrawingCoordinate = (time) => {
+        if (!Number.isFinite(time)) return null;
         const timeScale = chart.timeScale();
         const exactCoordinate = timeScale.timeToCoordinate(time);
         if (exactCoordinate != null) return exactCoordinate;
-        if (!Number.isFinite(time) || candlesData.length === 0) return null;
+        if (candlesData.length === 0) return null;
 
         const firstCandle = candlesData[0];
         const lastCandle = candlesData[candlesData.length - 1];
@@ -468,12 +469,6 @@ export function createChart(container, options) {
             return handle;
         });
         overlay.append(riskBox, rewardBox, label);
-        [riskBox, rewardBox].forEach((zone) => {
-            zone.addEventListener('pointerdown', (event) => {
-                event.stopPropagation();
-                if (drawingId) selectDrawing(drawingId);
-            });
-        });
         const position = { id: drawingId, side, entryPrice, stopPrice, targetPrice, entryTime, lines, riskBox, rewardBox, label, handles, elements: [riskBox, rewardBox, label, ...handles] };
         updatePositionLabel(position);
         label.style.cursor = 'pointer';
@@ -614,7 +609,7 @@ export function createChart(container, options) {
         }
 
         repositionPositions();
-        options.onDrawingModified?.(id, next);
+        dragState.latestPatch = createDrawingPatch(target.type, next);
     };
 
     const queryRayState = (ray, next) => {
@@ -643,7 +638,7 @@ export function createChart(container, options) {
                 ...horizontalRays.map((ray) => ({ id: ray.id, type: 'ray', time: ray.startTime, price: ray.price })),
                 ...trendLines.map((line) => ({ id: line.id, type: 'trendline', p1: line.p1, p2: line.p2 })),
                 ...ranges.map((range) => ({ id: range.id, type: 'range', p1: range.p1, p2: range.p2 })),
-                ...positions.map((position) => ({ id: position.id, type: position.side, entry: position.entryPrice, stop: position.stopPrice, pt: position.targetPrice, entryTime: position.entryTime })),
+                ...positions.map((position) => ({ id: position.id, type: position.side, entry: position.entryPrice, stop: position.stopPrice, pt: position.targetPrice, entryTime: position.entryTime, endTime: position.endTime })),
             ], geometry);
             if (hit?.id) {
                 const original = findDrawingById(hit.id);
@@ -764,15 +759,16 @@ export function createChart(container, options) {
     chart.subscribeClick(handleChartClick);
     chart.subscribeCrosshairMove(handleCrosshairMove);
 
-    container.addEventListener('pointerdown', (event) => {
+    const handleDrawingPointerDown = (event) => {
         if (activeTool || !event.isPrimary) return;
+        if (event.target instanceof Element && event.target.closest('.position-handle')) return;
         const point = getPointerPoint(event);
         const hit = hitTestDrawing(point, [
             ...levels.map((level) => ({ id: level.id, type: 'hline', price: level.price })),
             ...horizontalRays.map((ray) => ({ id: ray.id, type: 'ray', time: ray.startTime, price: ray.price })),
             ...trendLines.map((line) => ({ id: line.id, type: 'trendline', p1: line.p1, p2: line.p2 })),
             ...ranges.map((range) => ({ id: range.id, type: 'range', p1: range.p1, p2: range.p2 })),
-            ...positions.map((position) => ({ id: position.id, type: position.side, entry: position.entryPrice, stop: position.stopPrice, pt: position.targetPrice, entryTime: position.entryTime })),
+            ...positions.map((position) => ({ id: position.id, type: position.side, entry: position.entryPrice, stop: position.stopPrice, pt: position.targetPrice, entryTime: position.entryTime, endTime: position.endTime })),
         ], {
             width: container.clientWidth,
             toX: (time) => timeToDrawingCoordinate(time),
@@ -783,18 +779,22 @@ export function createChart(container, options) {
         if (!hit) return;
         event.preventDefault();
         event.stopPropagation();
+        container.setPointerCapture(event.pointerId);
         const original = findDrawingById(hit.id);
         selectDrawing(hit.id);
         dragState = {
             id: hit.id,
             mode: hit.mode,
             original,
+            pointerId: event.pointerId,
+            latestPatch: null,
             anchorTime: hit.anchorTime ?? (original?.time ?? original?.entryTime ?? original?.p1?.time ?? null),
             anchorPrice: hit.anchorPrice ?? (original?.price ?? original?.entry ?? original?.p1?.price ?? null),
         };
-    }, { capture: true });
+    };
+    container.addEventListener('pointerdown', handleDrawingPointerDown, { capture: true });
 
-    container.addEventListener('pointermove', (event) => {
+    const handleDrawingPointerMove = (event) => {
         if (activeTool === 'trendline' && draftTrendLine) {
             const point = getPointerPoint(event);
             const time = normalizeChartTime(chart.timeScale().coordinateToTime(point.x));
@@ -820,11 +820,20 @@ export function createChart(container, options) {
         event.preventDefault();
         event.stopPropagation();
         updateDraggedDrawing(point);
-    }, { capture: true });
+    };
+    container.addEventListener('pointermove', handleDrawingPointerMove, { capture: true });
 
-    window.addEventListener('pointerup', () => {
+    const finishDrawingDrag = (event) => {
+        if (!dragState || (event && event.pointerId !== dragState.pointerId)) return;
+        const completedDrag = dragState;
         dragState = null;
-    });
+        if (completedDrag.latestPatch) {
+            options.onDrawingModified?.(completedDrag.id, completedDrag.latestPatch);
+        }
+    };
+
+    window.addEventListener('pointerup', finishDrawingDrag);
+    window.addEventListener('pointercancel', finishDrawingDrag);
 
     window.addEventListener('keydown', (event) => {
         const tag = document.activeElement?.tagName;
@@ -968,6 +977,10 @@ export function createChart(container, options) {
             removeAllDrawings();
             resizeObserver.disconnect();
             clearTimeout(saveStateTimer);
+            container.removeEventListener('pointerdown', handleDrawingPointerDown, { capture: true });
+            container.removeEventListener('pointermove', handleDrawingPointerMove, { capture: true });
+            window.removeEventListener('pointerup', finishDrawingDrag);
+            window.removeEventListener('pointercancel', finishDrawingDrag);
             chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
             overlay.remove();
             ohlcLegend.remove();

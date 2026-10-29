@@ -14,8 +14,48 @@ function segDist(px, py, x1, y1, x2, y2) {
   return dist(px, py, cx, cy);
 }
 
+function hitTestRay(pointer, drawing, geometry) {
+  const y0 = geometry.toY?.(drawing.price);
+  const x0 = geometry.toX?.(drawing.time);
+  if (y0 == null || x0 == null) return null;
+  if (dist(pointer.x, pointer.y, x0, y0) <= 8) {
+    return { id: drawing.id, mode: 'ray-anchor' };
+  }
+  if (pointer.x >= x0 && Math.abs(pointer.y - y0) <= 6) {
+    return {
+      id: drawing.id,
+      mode: 'ray-body',
+      anchorTime: geometry.fromX ? geometry.fromX(pointer.x) : pointer.x,
+      anchorPrice: geometry.fromY ? geometry.fromY(pointer.y) : pointer.y,
+    };
+  }
+  return null;
+}
+
+export function createDrawingPatch(type, drawing) {
+  if (!drawing) return null;
+
+  if (type === 'hline') return { price: drawing.price };
+  if (type === 'ray') return { price: drawing.price, startTime: drawing.time };
+  if (type === 'trendline' || type === 'range') {
+    return { p1: drawing.p1, p2: drawing.p2 };
+  }
+  if (type === 'long' || type === 'short') {
+    const patch = {
+      entryPrice: drawing.entry,
+      stopPrice: drawing.stop,
+      targetPrice: drawing.pt,
+    };
+    if ('entryTime' in drawing) patch.entryTime = drawing.entryTime;
+    if ('endTime' in drawing) patch.endTime = drawing.endTime;
+    return patch;
+  }
+  return null;
+}
+
 export function hitTestDrawing(pointer, drawings, geometry) {
   if (!pointer || !Array.isArray(drawings) || !geometry) return null;
+  let positionBodyHit = null;
 
   for (let index = drawings.length - 1; index >= 0; index -= 1) {
     const drawing = drawings[index];
@@ -29,20 +69,8 @@ export function hitTestDrawing(pointer, drawings, geometry) {
     }
 
     if (drawing.type === 'ray') {
-      const y0 = geometry.toY?.(drawing.price);
-      const x0 = geometry.toX?.(drawing.time);
-      if (y0 == null) continue;
-      if (x0 != null && dist(pointer.x, pointer.y, x0, y0) <= 8) {
-        return { id: drawing.id, mode: 'ray-anchor' };
-      }
-      if (x0 != null && pointer.x >= x0 && Math.abs(pointer.y - y0) <= 6) {
-        return {
-          id: drawing.id,
-          mode: 'ray-body',
-          anchorTime: geometry.fromX ? geometry.fromX(pointer.x) : pointer.x,
-          anchorPrice: geometry.fromY ? geometry.fromY(pointer.y) : pointer.y,
-        };
-      }
+      const hit = hitTestRay(pointer, drawing, geometry);
+      if (hit) return hit;
     }
 
     if (drawing.type === 'trendline') {
@@ -99,7 +127,9 @@ export function hitTestDrawing(pointer, drawings, geometry) {
       const stopY = geometry.toY?.(drawing.stop);
       const ptY = geometry.toY?.(drawing.pt);
       if (entryX == null || entryY == null || stopY == null || ptY == null) continue;
-      const endX = geometry.toX?.(drawing.endTime) ?? (geometry.width ?? entryX + 100);
+      const endX = Number.isFinite(drawing.endTime)
+        ? geometry.toX?.(drawing.endTime) ?? (geometry.width ?? entryX + 100)
+        : geometry.width ?? entryX + 100;
       const minY = Math.min(entryY, stopY, ptY);
       const maxY = Math.max(entryY, stopY, ptY);
       if (dist(pointer.x, pointer.y, entryX, entryY) <= 10) {
@@ -111,13 +141,18 @@ export function hitTestDrawing(pointer, drawings, geometry) {
       if (dist(pointer.x, pointer.y, endX, stopY) <= 10) {
         return { id: drawing.id, mode: 'position-stop' };
       }
-      if (pointer.x >= entryX && pointer.x <= endX && pointer.y >= minY && pointer.y <= maxY) {
-        return { id: drawing.id, mode: 'position-body', anchorTime: geometry.fromX ? geometry.fromX(pointer.x) : pointer.x, anchorPrice: geometry.fromY ? geometry.fromY(pointer.y) : pointer.y };
+      if (!positionBodyHit && pointer.x >= entryX && pointer.x <= endX && pointer.y >= minY && pointer.y <= maxY) {
+        positionBodyHit = {
+          id: drawing.id,
+          mode: 'position-body',
+          anchorTime: geometry.fromX ? geometry.fromX(pointer.x) : pointer.x,
+          anchorPrice: geometry.fromY ? geometry.fromY(pointer.y) : pointer.y,
+        };
       }
     }
   }
 
-  return null;
+  return positionBodyHit;
 }
 
 export function createDrawingFromTool(tool, pointer, geometry, base = {}) {
