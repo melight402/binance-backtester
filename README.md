@@ -19,7 +19,7 @@ The engine API is `initialize`, `changeSymbol`, `changeTimeframe`, `seek`, `setS
 
 ## Configuration
 
-The frontend uses Binance Futures public endpoints through the existing market API. Set `VITE_API_URL` when the position backend is not available at `http://localhost:3001/api`.
+The frontend uses Binance Futures public endpoints through the existing market API. Set `VITE_API_URL` when the position backend is not available at `http://localhost:3001/api`. The history UI listens on port `3000` and does not fall back to another port, so it cannot accidentally occupy the backend's port `3001`.
 
 The backend must expose `/api/positions/history/open`, `/api/positions/history/close`, and `/api/screenshots/upload`. Position screenshots are PNG multipart uploads and are limited by the backend to 10 MB.
 
